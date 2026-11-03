@@ -1,6 +1,6 @@
 {
   "name": "@local/dsh-projects",
-  "version": "0.1.0-preview.71-repair.8-public.2",
+  "version": "0.1.0-beta.1",
   "private": true,
   "type": "module",
   "engines": {

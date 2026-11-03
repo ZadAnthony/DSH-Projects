@@ -3,7 +3,7 @@
  */
 import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { cp, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises'
+import { cp, mkdir, mkdtemp, readFile, readdir, rename, rm, symlink, writeFile } from 'node:fs/promises'
 import { createRequire, isBuiltin } from 'node:module'
 import { dirname, extname, isAbsolute, relative, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -563,7 +563,8 @@ const clientBundledThirdParty = await writeBundledNotices(clientModules, 'notice
 await writeFile(resolve(project, 'NOTICE.md'), (await readFile(resolve(project, 'NOTICE.md'), 'utf8'))
   + '\nClient and Host bundles preserve original licenses, notices, package metadata and hashes for their actually inlined npm and SDK vendor inputs under lib/notices/client-bundled and lib/notices/host-bundled. Refer to each SOURCES.json for the exact package/version list.\n')
 const packed = JSON.parse(execFileSync('npm', ['pack', '--json', '--ignore-scripts', '--pack-destination', buildRoot], { cwd: project, encoding: 'utf8' }))[0]
-const tgz = resolve(buildRoot, packed.filename)
+const tgz = resolve(buildRoot, `dsh-projects-${version}.tgz`)
+await rename(resolve(buildRoot, packed.filename), tgz)
 const sourceHashes = {}
 async function hashSources(directory) {
   for (const item of await readdir(directory, { withFileTypes: true })) {

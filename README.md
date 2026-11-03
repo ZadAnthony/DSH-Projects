@@ -17,7 +17,7 @@ DeepSeek Harness 的本地项目协作插件，将多会话协作、长期上下
 
 ## 版本与环境
 
-当前预览版本为 `0.1.0-preview.71-repair.8-public.2`。
+当前预览版本为 `0.1.0-beta.1`。
 
 本预览版已在 **macOS arm64（Apple silicon）与 DeepSeek Harness `0.2.1-rc.5` Web** 验证源码构建、正常管理器安装、升级后的实际加载及重启回读。Desktop 的既有安装验证来自同源基础版本，本公开包尚未在 Desktop 重新验证；其他操作系统、Intel Mac 和其他宿主版本尚未验证。
 
@@ -25,14 +25,14 @@ DeepSeek Harness 的本地项目协作插件，将多会话协作、长期上下
 
 ## 安装
 
-从 [Releases](https://github.com/ZadAnthony/DSH-Projects/releases/tag/v0.1.0-preview.71-repair.8-public.2) 下载 [local-dsh-projects-0.1.0-preview.71-repair.8-public.2.tgz](https://github.com/ZadAnthony/DSH-Projects/releases/download/v0.1.0-preview.71-repair.8-public.2/local-dsh-projects-0.1.0-preview.71-repair.8-public.2.tgz)。插件运行时包名为 `@local/dsh-projects`。当前分发形式为预构建安装包，暂不提供 npm 安装或仓库链接直装。
+从 [Releases](https://github.com/ZadAnthony/DSH-Projects/releases/tag/v0.1.0-beta.1) 下载 [dsh-projects-0.1.0-beta.1.tgz](https://github.com/ZadAnthony/DSH-Projects/releases/download/v0.1.0-beta.1/dsh-projects-0.1.0-beta.1.tgz)。插件运行时包名为 `@local/dsh-projects`。当前分发形式为预构建安装包，暂不提供 npm 安装或仓库链接直装。
 
 **Desktop**：使用 DSH `0.2.1-rc.5` App 内的“插件”管理器安装下载的 `.tgz`，正常重启 App，在插件详情核对版本与运行状态。
 
 **Web**：准备 Node.js 24 和可在终端运行的 `pnpm`。先正常停止已有 Web 服务，再在安装包所在目录运行：
 
 ```sh
-npx --yes @deepseek-ai/dsh@0.2.1-rc.5 plugin --profile web add ./local-dsh-projects-0.1.0-preview.71-repair.8-public.2.tgz
+npx --yes @deepseek-ai/dsh@0.2.1-rc.5 plugin --profile web add ./dsh-projects-0.1.0-beta.1.tgz
 npx --yes @deepseek-ai/dsh@0.2.1-rc.5 web
 ```
 
