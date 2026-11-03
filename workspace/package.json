@@ -1,0 +1,28 @@
+{
+  "name": "dsh-projects-workspace",
+  "version": "0.1.0-preview.71-repair.8-public.2",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "prompts:sync": "node ../scripts/sync-agent-prompts.mjs",
+    "prompts:check": "node ../scripts/sync-agent-prompts.mjs --check",
+    "workspace:info": "node ../scripts/workspace.mjs info",
+    "prepare:workspace": "node ../scripts/workspace.mjs prepare",
+    "prebuild": "node ../scripts/workspace.mjs prepare",
+    "build": "node ../scripts/workspace.mjs build:stock",
+    "build:stock": "node ../scripts/workspace.mjs build:stock",
+    "typecheck:host": "node ../scripts/workspace.mjs typecheck:host",
+    "typecheck:client": "node ../scripts/workspace.mjs typecheck:client",
+    "test:records": "node ../scripts/workspace.mjs test:records",
+    "package:projects": "node ../scripts/workspace.mjs build:stock",
+    "start:projects": "node ../scripts/workspace.mjs start",
+    "test:prompts": "node ../scripts/workspace.mjs test:prompts",
+    "deps:install": "npm ci --prefix ../scripts/plugin-dependencies --ignore-scripts --registry=https://registry.npmjs.org"
+  },
+  "license": "MIT",
+  "author": "DSH Projects contributors",
+  "description": "Project collaboration, conversation continuity, records and shared memory for DeepSeek Harness.",
+  "engines": {
+    "node": ">=24.0.0"
+  }
+}

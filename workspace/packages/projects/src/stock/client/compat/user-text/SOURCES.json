@@ -1,0 +1,30 @@
+{
+  "commit": "639ed015397290b3745d163aafe02ffee4aa3f84",
+  "license": "MIT",
+  "reason": "The rc.3 primitives no longer export projectUserText. Preserve the existing Projects message and queue presentation with this finite display helper; shared icons remain public upstream components.",
+  "files": [
+    {
+      "source": "packages/client/ui-primitives/src/user-text.tsx",
+      "sha256": "d8f4e591767ca97b2fd4fdffa5eae1fc4063ce65f3e675d851cf491fc007dfcd",
+      "local": "user-text.tsx",
+      "localSha256": "b33cdda7c73636477a32f4a14f71842bd6f9c1603c848b532216aabe5ba482d2",
+      "modified": true
+    },
+    {
+      "source": "packages/client/ui-primitives/src/user-text.module.css",
+      "sha256": "4a7c80989bc7af1b9d4d1116f7718d57768aaea2945c5caa0428791695b014f7",
+      "local": "user-text.module.css",
+      "localSha256": "337918e1a541719a9465a133a862f0a41cc58b1cd8554241b0588598a72b3b12",
+      "modified": true
+    },
+    {
+      "source": "packages/client/ui-primitives/src/markdown/MarkdownText.module.css",
+      "sha256": "b26d4977785a4ac6b60da56ac04c57116643830208ee76bb8095f8d8700cb7a5",
+      "fragment": "fileMention base, hover/focus, and focus-visible rules in user-text.module.css"
+    }
+  ],
+  "adaptations": [
+    "Public ReferenceIconRegular import replaces private sibling import.",
+    "Only the three fileMention CSS rules are retained from MarkdownText.module.css."
+  ]
+}

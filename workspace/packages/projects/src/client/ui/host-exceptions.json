@@ -1,0 +1,130 @@
+[
+  {
+    "file": "client/ui/tokens.css.ts",
+    "selector": ".projects-ui__empty, .projects-ui__error",
+    "property": "padding",
+    "value": "48px 20px",
+    "reason": "Shared empty and page-error states follow the host task manager empty-state spacing.",
+    "hostSource": "DSH 0.2.1-rc.3 1f81c047fc48fa190a683e469daa699857e9afe8 packages/client/ui-schedule/src/client/TaskManagerPage.module.css:361 (.empty)"
+  },
+  {
+    "file": "client/ui/tokens.css.ts",
+    "selector": ".projects-ui__settings-nav",
+    "property": "gap",
+    "value": "18px",
+    "reason": "Project-scoped SettingsShell reproduces the host settings navigation geometry.",
+    "hostSource": "DSH 0.2.1-rc.3 1f81c047fc48fa190a683e469daa699857e9afe8 packages/client/ui-settings-general/src/client/SettingsRoot.module.css:115 (.nav)"
+  },
+  {
+    "file": "client/ui/tokens.css.ts",
+    "selector": ".projects-ui__settings-nav",
+    "property": "padding",
+    "value": "22px 12px 0",
+    "reason": "Project-scoped SettingsShell reproduces the host settings navigation geometry.",
+    "hostSource": "DSH 0.2.1-rc.3 1f81c047fc48fa190a683e469daa699857e9afe8 packages/client/ui-settings-general/src/client/SettingsRoot.module.css:117 (.nav)"
+  },
+  {
+    "file": "client/ui/tokens.css.ts",
+    "selector": ".projects-ui__settings-nav-title",
+    "property": "font-size",
+    "value": "16px",
+    "reason": "The settings navigation title is the host's fixed 16px title role.",
+    "hostSource": "DSH 0.2.1-rc.3 1f81c047fc48fa190a683e469daa699857e9afe8 packages/client/ui-settings-general/src/client/SettingsRoot.module.css:124 (.navTitle)"
+  },
+  {
+    "file": "client/ui/tokens.css.ts",
+    "selector": ".projects-ui__settings-nav-item",
+    "property": "padding",
+    "value": "9px 16px 9px 12px",
+    "reason": "The project settings navigation follows the host settings cell pattern.",
+    "hostSource": "DSH 0.2.1-rc.3 1f81c047fc48fa190a683e469daa699857e9afe8 packages/client/ui-settings-general/src/client/SettingsRoot.module.css:145 (.navCell)"
+  },
+  {
+    "file": "client/ui/tokens.css.ts",
+    "selector": ".projects-ui__settings-head",
+    "property": "padding",
+    "value": "20px 14px 8px 10px",
+    "reason": "The project settings header preserves the host's 54px header geometry.",
+    "hostSource": "DSH 0.2.1-rc.3 1f81c047fc48fa190a683e469daa699857e9afe8 packages/client/ui-settings-general/src/client/SettingsRoot.module.css:195 (.header)"
+  },
+  {
+    "file": "client/ui/tokens.css.ts",
+    "selector": ".projects-ui__settings-body .projects-ui__settings-section-heading, .projects-ui__settings-body .projects-feature-settings .dsp-settings-object-heading h3",
+    "property": "font-size",
+    "value": "18px",
+    "reason": "Project settings section headings, including existing feature sections, reproduce the fixed host 18px/600 heading role.",
+    "hostSource": "DSH 0.2.1-rc.3 1f81c047fc48fa190a683e469daa699857e9afe8 packages/client/ui-settings-plugins/src/client/PluginsSettingsSection.module.css:13 (.heading)"
+  },
+  {
+    "file": "client/ui/tokens.css.ts",
+    "selector": ".dsh-projects__page-head",
+    "property": "padding-top",
+    "value": "28px",
+    "reason": "The Projects list page reproduces the host plugin manager page-head top inset.",
+    "hostSource": "DSH 0.2.1-rc.3 1f81c047fc48fa190a683e469daa699857e9afe8 packages/client/ui-plugin-manager/src/client/PluginManagerPage.module.css:32 (.pageHead)"
+  },
+  {
+    "file": "client/ui/tokens.css.ts",
+    "selector": ".dsh-projects__projects",
+    "property": "gap",
+    "value": "2px",
+    "reason": "Project cards use the host list-card stack rather than a second custom density.",
+    "hostSource": "DSH 0.2.1-rc.3 1f81c047fc48fa190a683e469daa699857e9afe8 packages/client/ui-plugin-manager/src/client/PluginManagerPage.module.css:239 (.cards)"
+  },
+  {
+    "file": "client/ui/tokens.css.ts",
+    "selector": ".projects-ui__list-row",
+    "property": "gap",
+    "value": "14px",
+    "reason": "The shared page-list row copies the host cardHead gap.",
+    "hostSource": "DSH 0.2.1-rc.3 1f81c047fc48fa190a683e469daa699857e9afe8 packages/client/ui-plugin-manager/src/client/PluginManagerPage.module.css:257 (.cardHead)"
+  },
+  {
+    "file": "client/ui/tokens.css.ts",
+    "selector": ".dsh-projects__project-head",
+    "property": "padding",
+    "value": "10px 28px 0 20px",
+    "reason": "The project header uses the host single-line conversation header geometry.",
+    "hostSource": "DSH 0.2.1-rc.3 1f81c047fc48fa190a683e469daa699857e9afe8 packages/client/ui-conversation/src/client/skeleton/ConversationRoot.module.css:22 (.header)"
+  },
+  {
+    "file": "client/ui/tokens.css.ts",
+    "selector": ".projects-ui__settings-head > div",
+    "property": "font-size",
+    "value": "16px",
+    "reason": "The headless settings modal title uses the fixed host modal title role.",
+    "hostSource": "DSH 0.2.1-rc.3 1f81c047fc48fa190a683e469daa699857e9afe8 packages/client/ui-primitives/src/Modal.module.css:81 (.title)"
+  },
+  {
+    "file": "client/ui/tokens.css.ts",
+    "selector": ".dsh-projects__list-page",
+    "property": "padding-bottom",
+    "value": "48px",
+    "reason": "The host plugin-manager page owns a 48px bottom inset beneath its single scrolling content column.",
+    "hostSource": "DSH 0.2.1-rc.3 1f81c047fc48fa190a683e469daa699857e9afe8 packages/client/ui-plugin-manager/src/client/PluginManagerPage.module.css:14 (.page)"
+  },
+  {
+    "file": "client/ui/tokens.css.ts",
+    "selector": ".dsh-projects__session-list",
+    "property": "gap",
+    "value": "2px",
+    "reason": "Execution navigation shares the same host card stack as the project list; the compact row keeps its own host geometry.",
+    "hostSource": "DSH 0.2.1-rc.3 1f81c047fc48fa190a683e469daa699857e9afe8 packages/client/ui-plugin-manager/src/client/PluginManagerPage.module.css:239 (.cards)"
+  },
+  {
+    "file": "client/ui/tokens.css.ts",
+    "selector": ".projects-library-entries",
+    "property": "gap",
+    "value": "2px",
+    "reason": "The Library consumes the same host card-list stack as the shared ListRow; its own file icon stays20 and remove action stays a sibling.",
+    "hostSource": "DSH 0.2.1-rc.3 1f81c047fc48fa190a683e469daa699857e9afe8 packages/client/ui-plugin-manager/src/client/PluginManagerPage.module.css:239 (.cards)"
+  },
+  {
+    "file": "client/ui/tokens.css.ts",
+    "selector": ".dsh-projects__project-head",
+    "property": "padding-inline-start",
+    "value": "max(20px, var(--dsh-frame-leading-clearance, 0px))",
+    "reason": "The owned header clears the frame's published total window-chrome band while retaining its existing 20px inset elsewhere; this equals the host header's 20px plus max(0px, clearance - 20px).",
+    "hostSource": "DSH 0.2.1-rc.3 1f81c047fc48fa190a683e469daa699857e9afe8 packages/client/ui-layout/src/client/index.ts:106-119 (shell.leading contract), AppFrame.module.css:172-188 (160px/84px total clearance); packages/client/ui-conversation/src/client/skeleton/ConversationRoot.module.css:22,77-81 (20px header plus remaining clearance)"
+  }
+]

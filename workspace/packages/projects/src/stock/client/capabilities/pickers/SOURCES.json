@@ -1,0 +1,93 @@
+{
+  "upstream": "https://github.com/deepseek-ai/deepseek-harness",
+  "commit": "639ed015397290b3745d163aafe02ffee4aa3f84",
+  "license": "MIT",
+  "files": [
+    {
+      "target": "permission/PermissionSelect.tsx",
+      "source": "packages/client/ui-permission-presets/src/client/PermissionSelect.tsx",
+      "sha256": "6efa26b32a64605b6bb731048e620063156b768e2d4be2867d5373f3f973ec49"
+    },
+    {
+      "target": "permission/PermissionSelect.module.css",
+      "source": "packages/client/ui-permission-presets/src/client/PermissionSelect.module.css",
+      "sha256": "5b719bd5204fd8b0dec45ccf6b7401c16dc0e804aed9c7eaa695d57796532632"
+    },
+    {
+      "target": "permission/presentation.ts",
+      "source": "packages/client/ui-permission-presets/src/client/presentation.ts",
+      "sha256": "9801807a906ed13af256542a410ae27d0edb2a0ecc646146c9b668f85616e955"
+    },
+    {
+      "target": "permission/locales.ts",
+      "source": "packages/client/ui-permission-presets/src/client/locales.ts",
+      "sha256": "73882bca205f945fc871bb8ab0954d411861969ac8fa837094272b31e4154040"
+    },
+    {
+      "target": "permission/catalog.ts",
+      "source": "packages/client/ui-permission-presets/src/client/catalog.ts",
+      "sha256": "1e868fea79b5735979e82c96872f6f1ce39d2c3e3fa500b4f625b91759557971"
+    },
+    {
+      "target": "agent/AgentPresetSeat.tsx",
+      "source": "packages/client/ui-agent-preset/src/client/AgentPresetSeat.tsx",
+      "sha256": "77a9f2d992097f765dfd56bba475075f971f3d5a4cc24f18e1f36c716caaa62c"
+    },
+    {
+      "target": "agent/AgentPresetSeat.module.css",
+      "source": "packages/client/ui-agent-preset/src/client/AgentPresetSeat.module.css",
+      "sha256": "9b468b40ffde94ed3433aa6e8096748edb3dd7fbeb2d429f758aadffd58eaf99"
+    },
+    {
+      "target": "agent/AgentPresetLabel.tsx",
+      "source": "packages/client/ui-agent-preset/src/client/AgentPresetLabel.tsx",
+      "sha256": "207ae1ba18f542b2e09ec9cb94061b6a2f3f20f40d02bd275f34f1f8a5cb3b93"
+    },
+    {
+      "target": "agent/AgentPresetLabel.module.css",
+      "source": "packages/client/ui-agent-preset/src/client/AgentPresetLabel.module.css",
+      "sha256": "f53c22f6560e04d664ef4cf87e62c9f62f782c64347ca0c5527f2c8222309149"
+    },
+    {
+      "target": "agent/locales.ts",
+      "source": "packages/client/ui-agent-preset/src/client/locales.ts",
+      "sha256": "b4eda9e9d2d8afa806daeb71586319a3b2b7ba0ec20326544f634607be8b2c48"
+    },
+    {
+      "target": "index.ts",
+      "source": "packages/client/ui-permission-presets/src/client/index.ts",
+      "sha256": "7d8bf2a01de17fb8efa1754e448c9ff957378b6489efe7687591968b48991384"
+    },
+    {
+      "target": "index.ts",
+      "source": "packages/client/ui-agent-preset/src/client/index.ts",
+      "sha256": "55e673ba204e6fae40a9ee6f8dc923af97400993587821574fe5eb9ea598cec6"
+    },
+    {
+      "target": "permission/options.ts",
+      "source": "packages/client/ui-permission-presets/src/client/index.ts",
+      "sha256": "7d8bf2a01de17fb8efa1754e448c9ff957378b6489efe7687591968b48991384"
+    },
+    {
+      "target": "agent/settings-store.ts",
+      "source": "packages/client/ui-agent-preset/src/client/settings-store.ts",
+      "sha256": "a8eaa5a2198954ef6e444e04ff5fdcc2f88c47d498683a29eb39aec7531606fe"
+    },
+    {
+      "target": "agent/seat-store.ts",
+      "source": "packages/client/ui-agent-preset/src/client/seat-store.ts",
+      "sha256": "710a1ba97934c24d92465fa40d7e3bd5713035460e500714d41e35dd68df0918"
+    }
+  ],
+  "adaptations": [
+    "Frontend alignment 2026-10-28: PermissionSelect.module.css .badge follows fixed rc.3 (1f81c047fc48fa190a683e469daa699857e9afe8) ui-permission-presets source: remove the older align-self/margin-top offset and use font-weight 500. Original copied-source hashes above remain provenance, not claims that adapted files are unchanged.",
+    "Current-session registration only: permission chip and slash popup; existing retained blank-session preset hero; read-only header label.",
+    "No Settings rows, default persistence, creator entry, startSession, or unbound stage. Developer tools is an explicit read-only observable port.",
+    "Permission chip keeps original SessionBinding; each slash option leases the binding captured before catalog await. Replaced bindings reject before command dispatch.",
+    "Agent roster is shared and fenced by invalidation epoch. Preset selections capture the original binding synchronously and never retarget after await.",
+    "Permission presentation uses current-session dictionaries only. clsx replaced with native string joining to avoid an additional runtime dependency.",
+    "Shared native Menu, RiskConfirmation, Toast, product icons, stock slots, commands, sessions, locale and stores remain public module imports.",
+    "AgentPresetSeat refusal Toast resolves its composer inside the originating trigger closest data-conversation-session pane and falls back to that trigger; neither a sibling Project pane nor the whole document supplies a different composer.",
+    "Production pane assembly 2026-10-28: existing blank preset seat accepts the actual projectsPanel retain only together with the live owner exact visible binding/current carrier predicate. The original mainView path remains; no retain source, Developer tools preference or Host admission is fabricated. The original header and hero leaves are projected into fixed private slots while their stock declaration owners remain intact."
+  ]
+}

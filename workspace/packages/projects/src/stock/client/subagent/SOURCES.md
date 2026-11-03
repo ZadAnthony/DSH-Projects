@@ -1,0 +1,7 @@
+# Native Subagent Aside assembly
+
+Native components and services are imported from the actual public stock modules, preserving the shared React/Cordis class identities. No host source module is imported at runtime.
+
+The small embedded `ContinuableBody` content selector in `index.tsx` is adapted from DeepSeek DSH commit `639ed015397290b3745d163aafe02ffee4aa3f84`, `packages/client/ui-subagent/src/client/sidebar-chat/index.tsx`, specifically `FixedChatConversationView` and `ConversationSlotPanel`. MIT text is included in `LICENSE`. Local differences: a Project-owned slot name; one fixed retained child; no root Sidebar service; exact child header and root carrier lease are supplied independently by the parent Domain. Its public `applyConversation` InputHub retains the full transient draft for this single physical child.
+
+`transport.ts` and `sessions.ts` are Project-owned adapters. They neither register child logical members nor synthesize carrier epochs. One-shot and unknown modes create a separate native Session/UiConversation through the backend's non-activating `uiFollowReadonly`, verify the real child header, and install no composer, keyboard, command source, question writer, or interaction stream. Continuable mode retains the original native child restrictions: the stock command/model/skill selectors and file intake intentionally hide or restrict addressed subagents. These modes are not converted into ordinary Session identities to unlock controls.

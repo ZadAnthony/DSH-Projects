@@ -1,0 +1,3 @@
+# Native component reuse
+
+Targets DeepSeek Harness 0.2.1-rc.3 (1f81c047fc48fa190a683e469daa699857e9afe8), MIT. Limited Agent driver, inbox, tool scheduler, model adapters and private UI algorithms retain their actual source commits and license records under lib/notices, including the original 0.2.0-rc.2 source at 639ed015397290b3745d163aafe02ffee4aa3f84 and explicitly recorded later adaptations. The relative provider-sdk directory is an ordinary SDK copy with its own source record, not a replacement package for DSH or a same-name SDK override. The host and its native components are ordinary peers; this package contains no replacement DSH distribution. TOOL_RUNTIME_SCHEDULER is a pinned internal ABI, not a stable upstream plugin extension point.

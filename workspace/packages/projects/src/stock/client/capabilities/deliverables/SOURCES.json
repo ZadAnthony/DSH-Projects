@@ -1,0 +1,70 @@
+{
+  "upstream": "https://github.com/deepseek-ai/deepseek-harness",
+  "commit": "639ed015397290b3745d163aafe02ffee4aa3f84",
+  "license": "MIT",
+  "scope": "Present log row, durable turn derivation, file cards, exact private FileReader callback and user-gesture default-application open via the existing serving Host capability. No global Settings, reveal, download route, embedded HTML runtime or changes review.",
+  "files": [
+    {
+      "target": "PresentRow.tsx",
+      "source": "packages/client/ui-deliverables/src/client/PresentRow.tsx",
+      "upstreamSha256": "5bebbe78a18e62ad3f4da9d2b3931938f056bc53df0b6b3195939108f6fa854b",
+      "localSha256": "5bebbe78a18e62ad3f4da9d2b3931938f056bc53df0b6b3195939108f6fa854b",
+      "adaptation": "Unchanged stock component."
+    },
+    {
+      "target": "PresentRow.module.css",
+      "source": "packages/client/ui-deliverables/src/client/PresentRow.module.css",
+      "upstreamSha256": "3bfed0d0ad6bd47d49ca070bfedec611ae355616cf60b19c0c8ec0aed458ed17",
+      "localSha256": "3bfed0d0ad6bd47d49ca070bfedec611ae355616cf60b19c0c8ec0aed458ed17",
+      "adaptation": "Unchanged stock styles."
+    },
+    {
+      "target": "PresentedFileCard.tsx",
+      "source": "packages/client/ui-deliverables/src/client/PresentedFileCard.tsx",
+      "upstreamSha256": "07addc96e0d9664c1d8d7ffbac53c4c0a53deb761ebc4fc95559381585e45fe9",
+      "localSha256": "3c66a2fdb10c077671d71acbd06abe08136077d9bbf5c48d7d30622c5c12b4b5",
+      "adaptation": "Keep the original file identity and content reader; expose independent content/source and default-application actions without nested buttons."
+    },
+    {
+      "target": "Deliverables.module.css",
+      "source": "packages/client/ui-deliverables/src/client/Deliverables.module.css",
+      "upstreamSha256": "99e722476a3ade8cb82bdf7fe6bc903e05bbf0b1921e3226f46180921a0d0772",
+      "localSha256": "3bdfec88e774d050339f8f5c6f2efddf14314c9a2e440f7c542dfafadd88230d",
+      "adaptation": "Preserve the stock card layout with wrapping actions and explicit per-action failure/status text in narrow panels."
+    },
+    {
+      "target": "locales.ts",
+      "source": "packages/client/ui-deliverables/src/client/locales.ts",
+      "upstreamSha256": "4840dc1d554a4f2457b51339e9195041b6230822c72fc5b10c8f3c2aad971cdb",
+      "localSha256": "55d2d0417e59ae319cb827c6d2afe832fdd947f0e419ffb0dc1f27e1e5be1156",
+      "adaptation": "Name the real content/source reader and user-gesture default-application request; state serving-Host, failure and remote-file boundaries."
+    },
+    {
+      "target": "presented.ts",
+      "source": "packages/client/ui-deliverables/src/presented.ts",
+      "upstreamSha256": "e37dd6d370631a4872c436f96795f2acfad5a96c0178e8431761c40c5115d94f",
+      "localSha256": "c28ef760543b2898746d65fcb068b7db3e4948d5c533eb51110cd1d47acdee5f",
+      "adaptation": "Retain only stock pure event validators and basename; remove native route URLs and desktop DTO."
+    },
+    {
+      "target": "changes-event.ts",
+      "source": "packages/client/ui-deliverables/src/changes.ts",
+      "upstreamSha256": "b046af2e455a9dc49b149e8a6081e48683b1176a0828412d4c91877d81202af7",
+      "localSha256": "f7d2381dd8699211de1014acc5f49dcd1c2fafad14ae8ba96217c056c426cde3",
+      "adaptation": "Retain pure announcement validator and its public event type augmentation; no changes HTTP or UI."
+    },
+    {
+      "target": "turn-deliverables.ts",
+      "source": "packages/client/ui-deliverables/src/client/turn-deliverables.ts",
+      "upstreamSha256": "e019136395106bfd87eb8f40eebb07328fcfb8f5d80f994d3b355bd16dc71815",
+      "localSha256": "d4659404a7b278ffc5d934a6dac551704908ef1d7e16da87f5693603678df852",
+      "adaptation": "Unchanged stock derivation and selectors, with local pure-validator import paths."
+    }
+  ],
+  "localAssembly": [
+    "index.ts",
+    "PresentedFiles.tsx",
+    "README.md",
+    "css-modules.d.ts"
+  ]
+}

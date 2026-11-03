@@ -1,0 +1,29 @@
+.board { min-width: 0; }
+.board .contents { display: grid; gap: 4px; padding-bottom: 12px; border-bottom: .5px solid var(--dsw-alias-border-l3); }
+.board .contents > div { display: flex; flex-wrap: wrap; gap: 4px 8px; min-width: 0; }
+.board .contents button { max-width: 100%; height: auto; white-space: normal; text-align: left; overflow-wrap: anywhere; }
+.board .block { display: grid; gap: 10px; padding: 4px 0 18px; border: 0; border-bottom: .5px solid var(--dsw-alias-border-l3); border-radius: 0; background: transparent; }
+.board .block:last-child { border-bottom: 0; }
+.board .block > h3 { margin: 0; font-size: 15px; line-height: 24px; font-weight: 600; scroll-margin-block-start: 12px; }
+.board .block > h3:focus { outline: 2px solid var(--dsw-alias-state-business-primary); outline-offset: 4px; border-radius: 3px; }
+.board .lead { min-width: 0; color: var(--dsw-alias-label-primary); }
+.board .prose { display: grid; gap: 10px; min-width: 0; }
+.board .prose > p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.board .full { min-width: 0; }
+.board .full > summary { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 8px; cursor: pointer; min-height: 28px; color: var(--dsw-alias-state-business-primary); font-size: 12px; line-height: 20px; }
+.board .full > summary::before { content: '▸'; }
+.board .full[open] > summary::before { content: '▾'; }
+.board .full > summary::-webkit-details-marker { display: none; }
+.board .full > summary:focus-visible, .board .table:focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary); outline-offset: 3px; border-radius: 3px; }
+.board .count { color: var(--dsw-alias-label-secondary); }
+.board .expanded { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; padding: 12px; margin-top: 4px; min-width: 0; background: var(--dsw-alias-bg-layer-1); border: .5px solid var(--dsw-alias-border-l3); border-radius: 10px; }
+.board h4 { font: inherit; font-weight: 500; margin: 0 0 8px; }
+.board .sources, .board .source, .board .notices { display: grid; gap: 8px; min-width: 0; }
+.board .source + .source { border-top: .5px solid var(--dsw-alias-border-l3); padding-top: 12px; }
+.board .notices p { margin: 0; }
+.board .list { display: grid; gap: 6px; margin: 0; padding-left: 20px; }
+.board .list > li { white-space: pre-wrap; overflow-wrap: anywhere; }
+.board .table { max-width: 100%; overflow: auto; overscroll-behavior: contain; }
+.board .table table { min-width: 100%; width: max-content; max-width: none; }
+.board .table th, .board .table td { min-width: 96px; max-width: 360px; white-space: pre-wrap; }
+@media (max-width: 480px) { .board .expanded { padding: 10px; } }

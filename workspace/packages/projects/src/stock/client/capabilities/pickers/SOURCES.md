@@ -1,0 +1,12 @@
+# Current-session native picker reuse
+
+Upstream: DeepSeek Harness `639ed015397290b3745d163aafe02ffee4aa3f84`, MIT. File-level source paths and original SHA-256 values are in `SOURCES.json`; the license is retained in `LICENSE`.
+
+The published permission and agent-preset `/client` entries export their `apply` functions and component types, but do not export the component values or directory/controller classes. Their complete `apply` functions also register global Settings mutation surfaces. This bounded copy retains the permission chip, shared process catalog, permission slash decoration, preset hero and read-only header components with their CSS and localized product copy.
+
+The Projects entry installs only those current-session surfaces. It reads the actual Developer tools preference through an observable port. It never supplies a fake ConfigForm/Settings schema, writes a default, stages a pick for an unknown session, starts a Session, or installs creator/settings rows. Public stock Menu, RiskConfirmation, Toast, icons, slots, commands, locale and stores retain their original module identities. The preset refusal Toast anchors inside its originating trigger's exact `data-conversation-session` pane, with the trigger itself as fallback, so a sibling Project pane or ordinary DSH composer cannot capture its position.
+
+Permission commands use the captured `SessionBinding.session.command`. Slash options retain the binding captured before their catalog read. Preset selection is admitted only for that exact binding while blank and Developer tools is enabled. The native `mainView` retain remains valid; the Projects production path instead requires its real `projectsPanel` retain plus the live owner's predicate for that exact visible provider/binding and current carrier creation/epoch. Readers and hidden panes cannot borrow this seat, and no `mainView` reference is synthesized. The supplied Host bridge still validates the exact carrier lease and blank state.
+
+The full product keeps its resident embedded input and renders the original bound hero leaf in that input's dock. Its private action/preset slots project only the three selected native header leaves and the existing hero preset leaf through the public registry's current winning entries, preserving the original component, inject, locale, order and store. Original header/content declarations remain owned by the stock assembly; no duplicate declarations, global Settings surface or Goal entry are installed.
+

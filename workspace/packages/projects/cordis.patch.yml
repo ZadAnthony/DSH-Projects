@@ -1,0 +1,5 @@
+- insert:
+    - id: dsh-projects
+      name: '@local/dsh-projects'
+      config:
+        dataRoot: !!js dshHomePath('projects-stock')

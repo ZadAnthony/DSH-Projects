@@ -1,0 +1,78 @@
+{
+  "upstream": "https://github.com/deepseek-ai/deepseek-harness",
+  "commit": "639ed015397290b3745d163aafe02ffee4aa3f84",
+  "license": "MIT",
+  "scope": "Changed-file result card and unified comparison. FileDiff preserves upstream rendering. ChangedFiles and read caches adapt upstream behavior to explicit private typed ports. No root fetch, native open, review tab, Settings writer or duplicate deliverables Definition.",
+  "files": [
+    {
+      "source": "packages/client/ui-deliverables/src/client/ChangedFiles.tsx",
+      "upstreamSha256": "563e61f5bc3317c96eda89227ccac506ee8d68795a62f004f896df2416382891",
+      "targets": [
+        "ChangedFiles.tsx"
+      ]
+    },
+    {
+      "source": "packages/client/ui-deliverables/src/client/ChangedFiles.module.css",
+      "upstreamSha256": "9195a2c60f3987266176a4b1d877ba022bb2b6c1bd9c8fabfc1f41f6277f1e67",
+      "targets": [
+        "ChangedFiles.module.css"
+      ]
+    },
+    {
+      "source": "packages/client/ui-deliverables/src/client/FileDiff.tsx",
+      "upstreamSha256": "96d2cd177bd5319ee7c19d02ac37cd1be7ce9b7ff9dc5a7d8b86d50b0d2e0ca8",
+      "targets": [
+        "FileDiff.tsx"
+      ]
+    },
+    {
+      "source": "packages/client/ui-deliverables/src/client/FileDiff.module.css",
+      "upstreamSha256": "a3d8aa354bf27c5652ceb1878b32e165b8ebbd9810b2adbeaa7abb78237e9d33",
+      "targets": [
+        "FileDiff.module.css"
+      ]
+    },
+    {
+      "source": "packages/client/ui-deliverables/src/client/changes-summary.ts",
+      "upstreamSha256": "cf8106c152066dd82131e91ae8a86c1b18855abc3ee644c65c83a7f48a6fbaa8",
+      "targets": [
+        "reads.ts"
+      ]
+    },
+    {
+      "source": "packages/client/ui-deliverables/src/client/changes-diff.ts",
+      "upstreamSha256": "f69f766b2ac56ffc81ef70a69af9188bac6f5b8974fddc64994ca360f04336a0",
+      "targets": [
+        "reads.ts"
+      ]
+    },
+    {
+      "source": "packages/client/ui-deliverables/src/client/host-read-store.ts",
+      "upstreamSha256": "57078fd7b910dca1f2f03f96381f0f1d158c4e513d793f6445ed4e4cb877d09c",
+      "targets": [
+        "reads.ts"
+      ]
+    },
+    {
+      "source": "packages/client/ui-deliverables/src/client/locales.ts",
+      "upstreamSha256": "4840dc1d554a4f2457b51339e9195041b6230822c72fc5b10c8f3c2aad971cdb",
+      "targets": [
+        "locales.ts"
+      ]
+    },
+    {
+      "source": "packages/client/ui-deliverables/src/client/turn-deliverables.ts",
+      "upstreamSha256": "e019136395106bfd87eb8f40eebb07328fcfb8f5d80f994d3b355bd16dc71815",
+      "targets": [
+        "../deliverables/turn-deliverables.ts"
+      ]
+    },
+    {
+      "source": "packages/client/ui-deliverables/src/changes.ts",
+      "upstreamSha256": "b046af2e455a9dc49b149e8a6081e48683b1176a0828412d4c91877d81202af7",
+      "targets": [
+        "types.ts"
+      ]
+    }
+  ]
+}
