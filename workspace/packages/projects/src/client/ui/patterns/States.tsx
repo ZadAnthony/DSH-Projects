@@ -1,4 +1,4 @@
-import { useRef, useState, type ComponentProps, type HTMLAttributes, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ComponentProps, type HTMLAttributes, type ReactNode } from "react";
 import { Button, IconFolderOpenOutlineRegular, IconInfoOutlineRegular, IconRefreshOutlineRegular, IconWarningOutlineRegular,
   StateDot, Toast } from "../primitives.tsx";
 
@@ -21,13 +21,15 @@ export function EmptyState({ title, description, icon, actions, children, classN
 
 export type ErrorStateProps = Omit<StateProps, "actions"> & { inline?: boolean; retry?: () => void; retryLabel?: string; diagnostic?: { readonly label: string; readonly content: string } };
 export function ErrorState({ title, description, icon, children, className, inline, retry, retryLabel, diagnostic, ...props }: ErrorStateProps) {
+  useEffect(() => {
+    if (diagnostic !== undefined) console.error('[dsh-projects]', diagnostic.label, diagnostic.content);
+  }, [diagnostic?.label, diagnostic?.content]);
   return <div role="alert" {...props}
     className={[inline ? "projects-ui__field-error" : "projects-ui__error", className].filter(Boolean).join(" ")}>
     {!inline && <span className="projects-ui__state-icon" aria-hidden="true">{icon ?? <IconWarningOutlineRegular />}</span>}
     <div className="projects-ui__state-title">{title}</div>
     {description !== undefined && <div className="projects-ui__state-description">{description}</div>}
     {children}
-    {diagnostic !== undefined && <details className="projects-ui__notice-details"><summary>{diagnostic.label}</summary><p className="projects-ui__diagnostic">{diagnostic.content}</p></details>}
     {retry !== undefined && <div className="projects-ui__state-actions">
       <Button variant="outline" size="sm" onClick={retry} icon={<IconRefreshOutlineRegular />}
         aria-label={retryLabel ?? (typeof title === "string" ? title : undefined)}>{retryLabel}</Button>

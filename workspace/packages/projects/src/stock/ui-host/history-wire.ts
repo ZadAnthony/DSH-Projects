@@ -4,11 +4,12 @@ import type {
 } from '@deepseek-ai/dsh-api-session-controller/types'
 import type { JsonValue } from '@deepseek-ai/dsh-util-values'
 import type { ProjectRecordLocator } from '../persistence/types.ts'
+import { PROJECT_HISTORY_RAW_REFERENCE_TYPES, PROJECT_HISTORY_RAW_LEGACY_TYPES, PROJECT_HISTORY_RAW_RECORD_TYPES } from '../../history-source-kinds.ts'
 
 export const PROJECT_UI_LOG_METADATA = 'projects/ui-log-metadata'
-const rawReferenceTypes = new Set(['projects/assistant-progress-v2', 'projects/tool-raw-v2', 'projects/tool-execution-return-v2', 'projects/tool-execution-final-v2'])
-const rawLegacyTypes = new Set(['projects/assistant-progress', 'projects/tool-raw', 'projects/tool-execution-return', 'projects/tool-execution-final'])
-const rawTypes = new Set([...rawReferenceTypes, ...rawLegacyTypes])
+const rawReferenceTypes = new Set<string>(PROJECT_HISTORY_RAW_REFERENCE_TYPES)
+const rawLegacyTypes = new Set<string>(PROJECT_HISTORY_RAW_LEGACY_TYPES)
+const rawTypes = new Set<string>(PROJECT_HISTORY_RAW_RECORD_TYPES)
 const metadataTypes = new Set(['projects/request-dispatch', 'projects/auxiliary-dispatch', 'projects/request-dispatch-v2', 'projects/auxiliary-dispatch-v2', ...rawTypes])
 
 /** These payloads have no native Conversation renderer; locate them without reading their bodies. */

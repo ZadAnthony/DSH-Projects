@@ -27,6 +27,10 @@ function ProjectsDomainRoot({ domain, translate }: { readonly domain: FullProjec
   const configurationFailure = useSyncExternalStore(domain.configurationFailure.subscribe, domain.configurationFailure.getSnapshot)
   const remoteFailure = useSyncExternalStore(domain.failure.subscribe, domain.failure.getSnapshot)
   const controlFailure = useSyncExternalStore(domain.sessions.controlError.subscribe, domain.sessions.controlError.getSnapshot)
+  useEffect(() => { if (remoteFailure !== undefined) console.error('[dsh-projects] interaction failed', remoteFailure) }, [remoteFailure])
+  useEffect(() => { if (controlFailure !== undefined) console.error('[dsh-projects] session status updates failed', controlFailure) }, [controlFailure])
+  useEffect(() => { if (configurationFailure !== undefined) console.error('[dsh-projects] configuration update failed', configurationFailure) }, [configurationFailure])
+  useEffect(() => { if (configurationWarnings.length > 0) console.warn('[dsh-projects] configuration notices', configurationWarnings) }, [configurationWarnings])
   useEffect(() => {
     let live = true
     let unmount: (() => void) | undefined
@@ -36,27 +40,8 @@ function ProjectsDomainRoot({ domain, translate }: { readonly domain: FullProjec
     })
     return () => { live = false; queueMicrotask(() => { unmount?.() }) }
   }, [domain])
-  const errors = [
-    { owner: 'view', title: translate('wholeRead.ready.viewFailure'), message: failure },
-    { owner: 'interaction', title: translate('wholeRead.ready.interactionFailure'), message: remoteFailure },
-    { owner: 'control', title: translate('wholeRead.ready.controlFailure'), message: controlFailure },
-    { owner: 'configuration', title: translate('wholeRead.ready.configurationFailure'), message: configurationFailure },
-  ].filter((item): item is typeof item & { message: string } => item.message !== undefined)
-  const count = errors.length + configurationWarnings.length
-  const title = errors.length === 1 ? errors[0]!.title : translate(errors.length > 1 ? 'wholeRead.ready.multipleFailures' : 'wholeRead.ready.configurationWarnings')
-  const details = <details className="projects-ui__notice-details">
-    <summary>{translate('wholeRead.ready.details', { count })}</summary>
-    <div className="projects-ui__notice-content" tabIndex={0} role="region" aria-label={translate('wholeRead.ready.detailsRegion')}>
-      <p>{translate('wholeRead.ready.scope')}</p>
-      <dl>{errors.map(item => <div key={item.owner}><dt>{item.title}</dt><dd>{item.message}</dd></div>)}
-        {configurationWarnings.length > 0 && <div><dt>{translate('wholeRead.ready.configurationWarnings')}</dt><dd>{configurationWarnings.join('\n')}</dd></div>}
-      </dl>
-    </div>
-  </details>
   return <section aria-label="Projects" style={{ height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-    {count > 0 && <section className="dsh-projects__lifecycle-report projects-ui__domain-notices" aria-label={translate('wholeRead.ready.label')}>
-      {errors.length > 0 ? <ErrorState inline title={title} description={failure === undefined ? undefined : translate('wholeRead.ready.viewRecovery')}>{details}</ErrorState> : <div role="status"><strong>{title}</strong>{details}</div>}
-    </section>}
+    {failure !== undefined && <ErrorState inline title={translate('wholeRead.ready.viewFailure')} description={translate('wholeRead.ready.viewRecovery')} diagnostic={{ label: translate('wholeRead.ready.viewFailure'), content: failure }} />}
     <div ref={container} data-projects-native-client="" style={{ flex: 1, minHeight: 0 }} />
   </section>
 }
@@ -177,9 +162,7 @@ function ProjectsRoot({ initialization, renderSlot, translate }: { readonly init
   const snapshot = useSyncExternalStore(initialization.subscribe, initialization.getSnapshot)
   useEffect(() => { initialization.start() }, [initialization])
   return <>{snapshot.phase === 'ready' ? <ProjectsDomainRoot domain={snapshot.domain} translate={translate} /> : <section className="dsh-projects" aria-label={translate('list.title')} style={{ height: '100%', minHeight: 0 }}>
-    {snapshot.phase === 'failed' ? <ErrorState title={translate('wholeRead.initialization.failed')} description={snapshot.message}>
-      <p>{translate('wholeRead.initialization.recovery')}</p>
-    </ErrorState> : <LoadingState label={translate('wholeRead.initialization.loading')} rows={3} />}
+    {snapshot.phase === 'failed' ? <ErrorState title={translate('wholeRead.initialization.failed')} description={translate('wholeRead.initialization.recovery')} diagnostic={{ label: translate('wholeRead.initialization.failed'), content: snapshot.message }} /> : <LoadingState label={translate('wholeRead.initialization.loading')} rows={3} />}
   </section>}<WorkspaceDirectoryFlow flow={initialization.directoryFlow} renderSlot={renderSlot} /></>
 }
 

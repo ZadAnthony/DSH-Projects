@@ -1,5 +1,5 @@
 /** 项目模块共用的只读身份、原生来源与文件能力；不提供业务台账写入。 */
-import type { NativeProjectSource, NativeProjectSourceItem } from './source-types.ts'
+import type { NativeProjectSource, NativeProjectSourceItem, NativeProjectSourceRead } from './source-types.ts'
 import type { Project, ProjectSession, ProjectSessionRole, ProjectSnapshot } from './records-types.ts'
 import type { CommunicationVisibleBlock } from './communication/types.ts'
 
@@ -31,6 +31,7 @@ export interface ProjectCoreSourceRead {
   readonly producer?: string
   readonly text?: string
   readonly reason?: string
+  readonly code?: NonNullable<NativeProjectSourceRead['code']>
   readonly nativeItems?: readonly NativeProjectSourceItem[]
   readonly partial?: true
   readonly limitations?: readonly string[]

@@ -4,7 +4,7 @@ import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { TypertClientEventListener, RemoteStreamHandle } from '@deepseek-ai/dsh-typert-protocol'
 import type { AskUserQuestionAnswer } from '@deepseek-ai/dsh-user-questions/types'
 import type { ApprovalOutcome } from '@deepseek-ai/dsh-user-approval/types'
-import type { ProjectUiInteractionFrame, ProjectUiPendingInteraction, ProjectUiTarget } from '../../ui-host/types.ts'
+import type { ProjectUiInteractionFrame, ProjectUiInteractionResponse, ProjectUiPendingInteraction, ProjectUiTarget } from '../../ui-host/types.ts'
 import type { FullProjectClientRemotePort } from './contracts.ts'
 
 type ApprovalListener = TypertClientEventListener<'approval/request'>
@@ -25,6 +25,9 @@ function questionAbort(): Error & { code: string } {
 }
 
 export interface ProjectInteractionSessions { binding(id: SessionId): SessionBinding | undefined }
+export type ProjectInteractionSubmission =
+  | { readonly status: 'submitting' | 'settled'; readonly requestId: string }
+  | { readonly status: 'failed'; readonly requestId: string; readonly item: ProjectUiPendingInteraction; readonly response: ProjectUiInteractionResponse; readonly error: unknown }
 
 export class ProjectNativeInteractions {
   readonly approvals = new Set<ApprovalListener>()
@@ -39,6 +42,7 @@ export class ProjectNativeInteractions {
     private readonly capture: (id: SessionId) => ProjectUiTarget,
     private readonly reader: boolean,
     private readonly failed: (error: unknown) => void,
+    private readonly submission?: (state: ProjectInteractionSubmission) => void,
   ) {}
 
   attachSessions(sessions: ProjectInteractionSessions): void {
@@ -99,6 +103,7 @@ export class ProjectNativeInteractions {
             if (frame.sessionId !== record.binding.sessionId) throw new Error('Projects interaction settlement has a different Session identity')
             record.pending.get(frame.requestId)?.lifetime.abort()
             record.pending.delete(frame.requestId)
+            this.submission?.({ status: 'settled', requestId: frame.requestId })
           }
         }
         if (!lifetime.signal.aborted) throw new Error('Projects interaction stream ended while its native Session remained retained')
@@ -157,8 +162,15 @@ export class ProjectNativeInteractions {
       response = { ...target, requestId: item.requestId, kind: timedOut ? 'timeout' : 'dismiss' }
     }
     if (signal.aborted || record.pending.get(item.requestId) !== pending) return
-    const result = await this.full.uiRespondInteraction(response)
-    if (!result.ok) throw result.error
+    this.submission?.({ status: 'submitting', requestId: item.requestId })
+    try {
+      const result = await this.full.uiRespondInteraction(response)
+      if (!result.ok) throw result.error
+      this.submission?.({ status: 'settled', requestId: item.requestId })
+    } catch (error) {
+      if (!signal.aborted) this.submission?.({ status: 'failed', requestId: item.requestId, item: structuredClone(item), response: structuredClone(response), error })
+      throw error
+    }
     // accepted=false means the Host already settled this exact request. Never invent an answer.
   }
 

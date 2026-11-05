@@ -365,6 +365,7 @@ export class ProjectsCoreAccess {
     if (!native.resolved) return {
       projectId, source, readable: false, isUserDecision: false,
       reason: native.reason ?? '原始来源当前不可读。', nativeItems: native.items,
+      ...(native.code === undefined ? {} : { code: native.code }),
       ...(native.partial === undefined ? {} : { partial: native.partial }),
       ...(native.limitations === undefined ? {} : { limitations: native.limitations }),
     }

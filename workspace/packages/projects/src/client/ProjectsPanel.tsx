@@ -1,7 +1,8 @@
 import { projectCarrierIdentity } from "./controller.ts";
 import {
-  useEffect, useLayoutEffect,
-  useId,
+  Fragment,
+  useCallback, useEffect, useLayoutEffect,
+  useId, useMemo,
   useRef,
   useState,
   type FormEvent,
@@ -9,6 +10,8 @@ import {
   type ReactNode,
 } from "react";
 import { flushSync } from "react-dom";
+import { ProjectReplyLinksProvider } from "./ProjectReplySessionLinks.tsx";
+import type { ReplySessionLinkTarget } from "../reply-session-links.ts";
 
 import {
   ActionMenu,
@@ -27,7 +30,7 @@ import {
   Tooltip,
   IconChevronLeftOutlineRegular,
   IconChevronDownOutlineRegular,
-  IconChevronsUpDownOutlineRegular,
+  IconChevronRightOutlineRegular,
   IconCloseOutlineRegular,
   IconPanelLeftOutlineRegular,
   IconPlusOutlineRegular,
@@ -37,7 +40,10 @@ import {
   IconSettingsOutlineRegular,
   IconEllipsisOutlineRegular,
   Modal,
+  MarkdownText,
+  MarkdownDelegateProvider,
   Tag,
+  Textarea,
 } from "./ui/index.ts";
 import type { ConversationViewsProps } from "@deepseek-ai/dsh-client-ui-conversation/client";
 import type {
@@ -69,8 +75,10 @@ import type {
   ProjectUnavailableSource,
 } from "../public-types.ts";
 import type { NativeEventSource, NativeProjectSource } from "../source-types.ts";
+import { isProjectUiRawRecordType } from "../history-source-kinds.ts";
+import { historyRecordReadingProjection } from "../history-display-summary.ts";
 import { LibraryPanel, LibraryReader, type LibrarySelection } from "./library/index.ts";
-import type { LibraryReading, ReadingOrigin, ReadingHint } from "./workflow-reading.ts";
+import type { ConversationReading, LibraryReading, ReadingScrollPosition, ReadingOrigin, ReadingHint } from "./workflow-reading.ts";
 import { ConversationFileReader } from "./ConversationFileReader.tsx";
 import type { ProjectConversationFileRequest } from "./workflow-navigation.ts";
 import type {
@@ -83,6 +91,8 @@ import type {
 import { ProjectSettings } from "./ProjectSettings.tsx";
 import { MemoryNoticeNavigationContext } from "./MemoryNotice.tsx";
 import { OverviewResizeHandle } from "./OverviewResizeHandle.tsx";
+import { OVERVIEW_DEFAULT_WIDTH, READING_DEFAULT_WIDTH, resolveOverviewLayout } from "./overview-layout.ts";
+import { formatUiDate } from "./ui/date-format.ts";
 import { DeletionConfirmation, ProjectDeletionResult, SessionDeletionResults, type DeletionTarget } from "./SessionDeletionResults.tsx";
 
 type ProjectPanelProps = PropsRuntime<"main"> &
@@ -126,9 +136,9 @@ function ProjectUpdatesInterrupted({ value, t, onReturnToList }: {
 }): ReactNode {
   return <ErrorState inline title={t("wholeRead.projectUpdates.title")}
     description={t(onReturnToList === undefined ? "wholeRead.projectUpdates.settingsRecovery" : "wholeRead.projectUpdates.previous")}
+    diagnostic={value.message === undefined ? undefined : { label: t("wholeRead.projectUpdates.details"), content: value.message }}
     retry={onReturnToList} retryLabel={t("project.back")}>
     {onReturnToList !== undefined && <p>{t("wholeRead.projectUpdates.recovery")}</p>}
-    {value.message !== undefined && <details><summary>{t("wholeRead.projectUpdates.details")}</summary><p>{value.message}</p></details>}
   </ErrorState>;
 }
 
@@ -168,9 +178,8 @@ function ProjectConversationReady({ ready, commitKey, onContentCommit, children 
   }, [commitKey, ready, contentReady]);
   if (ready !== undefined && settled?.ready !== ready) return <LoadingState label={t("p5.panel.connectingConversation")} rows={1} />;
   if (ready !== undefined && settled?.ready === ready && settled.error !== undefined) return <ErrorState title={t("p5.panel.conversationConnectionUnavailable")}
-    description={t("p5.panel.conversationConnectionRecovery")}>
-    <details className="projects-ui__notice-details"><summary>{t("p5.panel.errorDetails")}</summary><p className="projects-ui__diagnostic">{settled.error}</p></details>
-  </ErrorState>;
+    description={t("p5.panel.conversationConnectionRecovery")}
+    diagnostic={{ label: t("p5.panel.errorDetails"), content: settled.error }} />;
   return children;
 }
 
@@ -267,13 +276,6 @@ function confirmedCreatedMain(detail: ProjectDetail): ProjectSessionRecord | und
   return carrier?.sourceKind === 'available' && carrier.sessionCreatedAt !== undefined ? main : undefined;
 }
 
-function lastExecutionSession(
-  detail: ProjectDetail,
-): ProjectSessionRecord | undefined {
-  return [...detail.sessions]
-    .reverse()
-    .find((session) => session.role === "execution");
-}
 
 function sourceRoleText(
   item: ProjectNativeSourceRead["items"][number],
@@ -330,20 +332,29 @@ function libraryPositionKey(projectId: string, sessionId: string, selection: Lib
     ? location.relativePath : location.entryId, location.kind === "reference" ? location.relativePath ?? "" : ""]);
 }
 
-function SourceMetadata({ item, detail, t }: {
+function SourceMetadata({ item, detail, t, recorded = false }: {
   readonly item: ProjectNativeSourceRead["items"][number];
   readonly detail: ProjectDetail;
   readonly t: Translate;
+  readonly recorded?: boolean;
 }): ReactNode {
   const hostSessionId = item.nativeSource?.hostSessionId ?? item.bodySource?.hostSessionId;
   const session = detail.sessions.find(value => value.hostSessionId === hostSessionId
     || value.carriers?.some(carrier => carrier.hostSessionId === hostSessionId));
   const sender = sourceSender(item, detail);
+  if (recorded) return <header className="dsh-projects__history-record-meta">
+    <strong>{session?.title ?? t("p3.history.originalConversation")}</strong>
+    <div className="dsh-projects__history-record-byline">
+      <span>{sourceRoleText(item, t)}</span>
+      <time dateTime={new Date(item.time).toISOString()}>{formatUiDate(item.time, t)}</time>
+      {sender !== undefined && <span>{t("project.history.sender", { value: sender })}</span>}
+    </div>
+  </header>;
   return <div className="dsh-projects__source-meta">
     {session !== undefined && <Tag tone="quiet">{session.role === "main" ? t("project.main.label") : session.title}</Tag>}
     <Tag tone="quiet">{sourceRoleText(item, t)}</Tag>
     <span>{t(item.isTarget ? "project.sources.target" : "project.sources.context")}</span>
-    <time dateTime={new Date(item.time).toISOString()}>{new Date(item.time).toLocaleString()}</time>
+    <time dateTime={new Date(item.time).toISOString()}>{formatUiDate(item.time, t)}</time>
     {sender !== undefined && <span>{t("project.history.sender", { value: sender })}</span>}
   </div>;
 }
@@ -352,10 +363,12 @@ function VisibleItems({
   items,
   detail,
   t,
+  recorded = false,
 }: {
   readonly items: readonly ProjectNativeSourceRead["items"][number][];
   readonly detail: ProjectDetail;
   readonly t: Translate;
+  readonly recorded?: boolean;
 }): ReactNode {
   return items.map((item) => {
     const bounded = item.bodyRange !== undefined && (item.bodyRange.start > 0 || item.bodyRange.end < item.bodyRange.total);
@@ -364,13 +377,15 @@ function VisibleItems({
         key={`${item.seq}:${item.isTarget}:${item.kind}`}
         className="dsh-projects__source-item"
       >
-        <SourceMetadata item={item} detail={detail} t={t} />
-        {item.partial && <p className="dsh-projects__history-meta" role="status"><Tag tone="warning">{t("project.history.partial")}</Tag></p>}
-        <div className="dsh-projects__source-text">{item.text}</div>
+        <SourceMetadata item={item} detail={detail} t={t} recorded={recorded} />
+        {item.partial && (recorded
+          ? <p className="dsh-projects__history-record-notice" role="status">{t(item.recordPhase === "saved-prefix" ? "project.history.savedReplyFragment" : "project.history.partial")}</p>
+          : <p className="dsh-projects__history-meta" role="status"><Tag tone="warning">{t("project.history.partial")}</Tag></p>)}
+        {recorded ? <HistoryRecordText item={item} t={t} /> : <div className="dsh-projects__source-text">{item.text}</div>}
         {bounded && <p className="dsh-projects__history-meta" role="status">{t("p3.history.bodyRange", {
           start: String(item.bodyRange!.start + 1), end: String(item.bodyRange!.end), total: String(item.bodyRange!.total),
         })}</p>}
-        {(item.limitations ?? []).map((limitation) => (
+        {!recorded && (item.limitations ?? []).map((limitation) => (
           <p key={limitation} className="dsh-projects__history-meta">
             {limitation}
           </p>
@@ -378,6 +393,16 @@ function VisibleItems({
       </article>
     );
   });
+}
+
+function HistoryRecordText({ item, t }: { readonly item: ProjectNativeSourceRead["items"][number]; readonly t: Translate }): ReactNode {
+  const projection = useMemo(() => historyRecordReadingProjection(item.text, {
+    sessionLink: t("project.history.sessionLink"), incompleteReference: t("project.history.incompleteReference"), image: t("project.history.imageAlternative"),
+  }, item.partial === true), [item.text, item.partial, t]);
+  const labels = useMemo(() => ({ code: { copyLabel: t("p3.library.markdownCopy"), copiedLabel: t("p3.library.markdownCopied") }, footnotes: t("p3.library.markdownFootnotes") }), [t]);
+  return <div className="dsh-projects__source-text" data-project-history-reading="">
+    {projection.textOnly ? projection.text : <MarkdownDelegateProvider><MarkdownText text={projection.text} labels={labels} /></MarkdownDelegateProvider>}
+  </div>;
 }
 
 function unavailableSourceText(kind: ProjectUnavailableSource["kind"], t: Translate): string {
@@ -457,6 +482,12 @@ function speakerLabel(value: ProjectHistorySpeaker | "", t: Translate): string {
   }
 }
 
+function historySummaryText(item: ProjectHistorySearchItem, t: Translate): string {
+  if (item.displaySummary === undefined) return item.text;
+  const text = item.displaySummary.map(part => typeof part === 'string' ? part : t(part.kind === 'partial-preview' ? 'project.history.partialPreview' : 'project.history.sessionLink')).join('');
+  return Array.from(text).slice(0, 256).join('');
+}
+
 function HistoryPanel({
   projectId,
   detail,
@@ -484,32 +515,65 @@ function HistoryPanel({
   const [speaker, setSpeaker] = useState<ProjectHistorySpeaker | "">("");
   const [result, setResult] = useState<ProjectHistorySearchResult>();
   const [resultDisposition, setResultDisposition] = useState("");
+  // Keep cursor coordinates only; every navigation still reads a single bounded batch.
+  type BatchPosition = { readonly cursor?: string; readonly previous: readonly (string | undefined)[]; readonly number: number };
+  const firstBatch: BatchPosition = { previous: [], number: 1 };
+  const [batch, setBatch] = useState<BatchPosition>(firstBatch);
+  const attemptedBatch = useRef<BatchPosition>(firstBatch);
+  const [unavailableResult, setUnavailableResult] = useState<ProjectHistorySearchResult>();
+  const [readError, setReadError] = useState<{ readonly item: ProjectHistorySearchItem; readonly opener: HTMLElement }>();
   const disposition = detail.unavailableSources.map(source => `${source.hostSessionId}:${source.sourceRevision}`).join("|");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>();
+  const [timeError, setTimeError] = useState<"fromTime" | "toTime" | "range">();
+  const timeErrorId = useId();
+  const fromInput = useRef<HTMLInputElement>(null);
+  const toInput = useRef<HTMLInputElement>(null);
   const epoch = useRef(0);
   const abortRef = useRef<AbortController>();
   useEffect(() => () => { epoch.current++; abortRef.current?.abort(); }, [projectId]);
-  const changed = (): void => { epoch.current++; abortRef.current?.abort(); setResult(undefined); setLoading(false); setError(undefined); };
-  useEffect(() => { changed(); }, [disposition]);
+  const changed = (): void => {
+    epoch.current++; abortRef.current?.abort();
+    setResult(undefined); setResultDisposition(""); setBatch(firstBatch); attemptedBatch.current = firstBatch;
+    setUnavailableResult(undefined); setReadError(undefined); setLoading(false); setError(undefined); setTimeError(undefined);
+  };
+  useEffect(() => { changed(); }, [projectId, disposition]);
 
-  const search = async (cursor?: string): Promise<void> => {
+  const search = async (position: BatchPosition = firstBatch): Promise<void> => {
+    const from = fromTime === "" ? undefined : new Date(fromTime).getTime();
+    const to = toTime === "" ? undefined : new Date(toTime).getTime();
+    const invalidTime = from !== undefined && !Number.isFinite(from) ? "fromTime"
+      : to !== undefined && !Number.isFinite(to) ? "toTime"
+      : from !== undefined && to !== undefined && from >= to ? "range" : undefined;
+    if (invalidTime !== undefined) {
+      setTimeError(invalidTime);
+      (invalidTime === "fromTime" ? fromInput : toInput).current?.focus();
+      return;
+    }
+    setTimeError(undefined);
     const current = ++epoch.current;
     abortRef.current?.abort();
     const abort = new AbortController(); abortRef.current = abort;
     setLoading(true);
-    setError(undefined);
+    setError(undefined); setReadError(undefined);
+    attemptedBatch.current = position;
     const request: ProjectHistorySearchRequest = {
       ...(sessionId === "" ? {} : { sessionIds: [sessionId] }),
       ...(keyword.trim() === "" ? {} : { keyword: keyword.trim() }),
       ...(speaker === "" ? {} : { speaker }),
-      ...(fromTime === "" ? {} : { fromTime: new Date(fromTime).getTime() }),
-      ...(toTime === "" ? {} : { toTime: new Date(toTime).getTime() }),
-      ...(cursor === undefined ? {} : { cursor }),
+      ...(from === undefined ? {} : { fromTime: from }),
+      ...(to === undefined ? {} : { toTime: to }),
+      ...(position.cursor === undefined ? {} : { cursor: position.cursor }),
     };
     try {
       const value = await queryHistory(projectId, request, abort.signal);
-      if (current === epoch.current) { setResult(value); setResultDisposition(disposition); }
+      if (current !== epoch.current) return;
+      if (value.status === "unavailable") {
+        // A failed continuation must not replace the last readable batch or advance its position.
+        setUnavailableResult(value); setError(t("p3.history.error"));
+      } else {
+        setResult(value); setResultDisposition(disposition); setBatch(position); setUnavailableResult(undefined);
+      }
     } catch {
       if (current === epoch.current) setError(t("p3.history.error"));
     } finally {
@@ -519,13 +583,17 @@ function HistoryPanel({
 
   const open = async (item: ProjectHistorySearchItem, opener: HTMLElement): Promise<void> => {
     if (item.nativeSource === undefined) return;
-    setError(undefined);
+    const current = epoch.current;
+    setReadError(undefined);
     try {
       await readHistory(projectId, item.nativeSource, opener);
     } catch {
-      setError(t("p3.history.error"));
+      if (current === epoch.current) setReadError({ item, opener });
     }
   };
+  const invalidHosts = new Set(unavailableResult?.unavailableSources?.map(source => source.hostSessionId) ?? []);
+  const canContinue = resultDisposition === disposition
+    && !result?.items.some(item => sourceInvalidation(detail, item.session.hostSessionId) !== undefined || invalidHosts.has(item.session.hostSessionId));
 
   return (
     <section
@@ -592,10 +660,18 @@ function HistoryPanel({
             }}
           />
         </label>
-        <label className="dsp-field">{t('project.history.fromTime')}<Input type="datetime-local" step="1" value={fromTime}
+        <label className="dsp-field">{t('project.history.fromTime')}<Input ref={fromInput} type="datetime-local" step="1" value={fromTime}
+          aria-invalid={timeError === "fromTime" || timeError === "range" || undefined}
+          aria-describedby={timeError === "fromTime" || timeError === "range" ? timeErrorId : undefined}
           onChange={event => { changed(); setFromTime(event.target.value); }} /></label>
-        <label className="dsp-field">{t('project.history.toTime')}<Input type="datetime-local" step="1" value={toTime}
-          onChange={event => { changed(); setToTime(event.target.value); }} /></label>
+        <label className="dsp-field">{t('project.history.toTime')}<Input ref={toInput} type="datetime-local" step="1" value={toTime}
+          aria-invalid={timeError === "toTime" || timeError === "range" || undefined}
+          aria-describedby={timeError === "toTime" || timeError === "range" ? timeErrorId : undefined}
+          onChange={event => { changed(); setToTime(event.target.value); }} />
+          {timeError !== undefined && <span id={timeErrorId} className="projects-ui__field-error" role="alert">
+            {t(timeError === "range" ? "project.history.invalidTimeRange" : "project.history.invalidLocalTime")}
+          </span>}
+        </label>
         <div className="dsh-projects__history-form-actions">
           <Button variant="primary" size="sm" type="submit" disabled={loading}>
             {loading && <StateDot state="ongoing" />}
@@ -607,14 +683,20 @@ function HistoryPanel({
         </div>
       </form>
       {loading && <LoadingState label={t("project.history.searching")} />}
-      {error !== undefined && <ErrorState title={error} retry={() => { void search(); }} retryLabel={t("list.retry")} />}
+      {error !== undefined && <>
+        <ErrorState title={error} retry={() => { void search(attemptedBatch.current); }} retryLabel={t("list.retry")} />
+        {result !== undefined && <p className="dsh-projects__history-meta" role="status">{t("project.history.retainedSnapshot", { page: String(batch.number) })}</p>}
+      </>}
+      {readError !== undefined && <ErrorState title={t("p3.history.error")} retry={() => { void open(readError.item, readError.opener); }} retryLabel={t("list.retry")} />}
+      {(unavailableResult?.unavailableSources ?? []).map(source => <p key={`${source.hostSessionId}:${source.sourceRevision}`}
+        className="dsh-projects__history-meta" role="status"><Tag tone="warning">{unavailableSourceText(source.kind, t)}</Tag></p>)}
+      {unavailableResult?.limitations.map(limitation => <p key={limitation} className="dsh-projects__history-meta">
+        {t("project.history.limitations", { value: limitation })}
+      </p>)}
       {result !== undefined && (
         <>
           {result.status === "partial" && (
             <p className="dsh-projects__history-meta" role="status"><Tag tone="warning">{t("project.history.partial")}</Tag></p>
-          )}
-          {result.status === "unavailable" && (
-            <ErrorState title={t("p3.history.error")} retry={() => { void search(); }} retryLabel={t("list.retry")} />
           )}
           {result.status !== "unavailable" && result.items.length === 0 && (
             <EmptyState icon={<IconSearchOutlineRegular size={32} />} title={t("project.history.empty")} description={t("p3.history.emptyHint")} />
@@ -622,10 +704,10 @@ function HistoryPanel({
           {(result.unavailableSources ?? []).map(source => <p key={`${source.hostSessionId}:${source.sourceRevision}`}
             className="dsh-projects__history-meta" role="status"><Tag tone="warning">{unavailableSourceText(source.kind, t)}</Tag></p>)}
           <div className="dsh-projects__record-list">
-            {result.items.filter(item => sourceInvalidation(detail, item.session.hostSessionId) === undefined).map((item) => {
+            {result.items.filter(item => sourceInvalidation(detail, item.session.hostSessionId) === undefined && !invalidHosts.has(item.session.hostSessionId)).map((item) => {
               const content = <>
                 <span className="dsh-projects__history-result-meta">
-                  <time dateTime={new Date(item.time).toISOString()}>{new Date(item.time).toLocaleString()}</time>
+                  <time dateTime={new Date(item.time).toISOString()}>{formatUiDate(item.time, t)}</time>
                   <span className="dsh-projects__history-result-speaker">{sourceRoleText(item, t)}</span>
                   {item.recordPhase === "accepted" && <Tag>{t("project.history.phaseAccepted")}</Tag>}
                   {item.recordPhase === "edited" && <Tag>{t("project.history.phaseEdited")}</Tag>}
@@ -637,14 +719,14 @@ function HistoryPanel({
                   {sourceSender(item, detail) === undefined ? "" : ` · ${t("project.history.sender", { value: sourceSender(item, detail)! })}`}
                 </span>
                 {item.messageGroup !== undefined && !item.messageGroup.representativeIsLatest && <span className="dsh-projects__history-result-context">
-                  {t('project.history.lastRecorded', { time: new Date(item.messageGroup.latestRecordedTime).toLocaleString() })}
+                  {t('project.history.lastRecorded', { time: formatUiDate(item.messageGroup.latestRecordedTime, t) })}
                 </span>}
-                <span className={`dsh-projects__history-result-summary${item.nativeSource === undefined ? " dsh-projects__history-result-summary--unlinked" : ""}`}>{item.text}</span>
+                <span className={`dsh-projects__history-result-summary${item.nativeSource === undefined ? " dsh-projects__history-result-summary--unlinked" : ""}`}>{historySummaryText(item, t)}</span>
               </>;
               const row = item.nativeSource === undefined
                 ? <article key={`${item.session.id}:${item.seq}:${item.kind}`} className="dsh-projects__history-result-row dsh-projects__history-result-row--unlinked">{content}</article>
                 : <ListRow key={`${item.session.id}:${item.seq}:${item.kind}`} className="dsh-projects__history-result-row"
-                  aria-label={t("p3.history.openResult", { session: item.session.title, role: sourceRoleText(item, t), time: new Date(item.time).toLocaleString() })}
+                  aria-label={t("p3.history.openResult", { session: item.session.title, role: sourceRoleText(item, t), time: formatUiDate(item.time, t) })}
                   onClick={event => { void open(item, event.currentTarget); }}
                   trailing={<IconChevronLeftOutlineRegular className="dsh-projects__entry-arrow" size={14} />}>{content}</ListRow>;
               return <div key={item.messageGroup?.versionsCursor ?? `${item.session.hostSessionId}:${item.seq}:${item.kind}:${item.messageId ?? item.toolCallId ?? ''}`}>
@@ -666,18 +748,21 @@ function HistoryPanel({
               {t("project.history.limitations", { value: limitation })}
             </p>
           ))}
-          {result.nextCursor !== undefined && resultDisposition === disposition && !result.items.some(item => sourceInvalidation(detail, item.session.hostSessionId) !== undefined) && (
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={loading}
-              onClick={() => {
-                void search(result.nextCursor);
-              }}
-            >
-              {t("project.history.next")}
+          <div className="dsh-projects__history-form-actions">
+            <p className="dsh-projects__history-meta" role="status">{t("project.history.batchNumber", { page: String(batch.number) })}</p>
+            <Button variant="outline" size="sm" type="button" disabled={loading || !canContinue || batch.previous.length === 0}
+              onClick={() => { void search({ cursor: batch.previous[batch.previous.length - 1], previous: batch.previous.slice(0, -1), number: batch.number - 1 }); }}>
+              {t("project.history.previous")}
             </Button>
-          )}
+            {result.nextCursor !== undefined && <Button variant="outline" size="sm" type="button" disabled={loading || !canContinue}
+              onClick={() => { void search({ cursor: result.nextCursor, previous: [...batch.previous, batch.cursor], number: batch.number + 1 }); }}>
+              {t("project.history.nextBatch")}
+            </Button>}
+            <Button variant="outline" size="sm" type="button" disabled={loading || batch.number === 1 && canContinue}
+              onClick={() => { void search(); }}>
+              {t("project.history.firstBatch")}
+            </Button>
+          </div>
         </>
       )}
     </section>
@@ -714,7 +799,8 @@ function HistoryMessageVersions({ projectId, item, queryHistory, open, t, onUnav
     finally { if (current === epoch.current) setLoading(false); }
   };
   return <div className="dsh-projects__history-meta">
-    <Button variant="ghost" size="sm" type="button" aria-expanded={expanded} onClick={() => {
+    <Button variant="ghost" size="sm" type="button" aria-expanded={expanded}
+      icon={expanded ? <IconChevronDownOutlineRegular size={14} aria-hidden="true" /> : <IconChevronRightOutlineRegular size={14} aria-hidden="true" />} onClick={() => {
       if (expanded) { epoch.current++; abortRef.current?.abort(); setLoading(false); setExpanded(false); }
       else { setExpanded(true); if (result === undefined) void load(group.versionsCursor); }
     }}>{t(expanded ? 'project.history.hideVersions' : 'project.history.showVersions', { count: String(group.versionCount) })}</Button>
@@ -723,17 +809,18 @@ function HistoryMessageVersions({ projectId, item, queryHistory, open, t, onUnav
       {failed && <ErrorState title={t('p3.history.error')} retry={() => { void load(result?.nextCursor ?? group.versionsCursor, result !== undefined); }} retryLabel={t('list.retry')} />}
       {result?.items.map(version => <ListRow key={`${version.seq}:${version.kind}:${version.messageId ?? ''}`}
         className="dsh-projects__history-result-row" disabled={version.nativeSource === undefined}
-        aria-label={t('project.history.openVersion', { phase: version.recordPhase ?? version.kind, time: new Date(version.time).toLocaleString() })}
+        aria-label={t('project.history.openVersion', { phase: version.recordPhase ?? version.kind, time: formatUiDate(version.time, t) })}
+        trailing={version.nativeSource === undefined ? undefined : <IconChevronLeftOutlineRegular className="dsh-projects__entry-arrow" size={14} aria-hidden="true" />}
         onClick={event => { void open(version, event.currentTarget); }}>
         <span className="dsh-projects__history-result-meta">
-          <time dateTime={new Date(version.time).toISOString()}>{new Date(version.time).toLocaleString()}</time>
+          <time dateTime={new Date(version.time).toISOString()}>{formatUiDate(version.time, t)}</time>
           <Tag>{t(version.recordPhase === 'accepted' ? 'project.history.phaseAccepted' : version.recordPhase === 'edited' ? 'project.history.phaseEdited'
             : version.recordPhase === 'consumed' ? 'project.history.phaseConsumed' : version.recordPhase === 'claimed' ? 'project.history.phaseClaimed'
             : version.recordPhase === 'canceled' ? 'project.history.phaseCanceled' : 'project.history.phaseOther', { phase: version.recordPhase ?? version.kind })}</Tag>
           {version.matchesSearch && <Tag>{t('project.history.versionMatches')}</Tag>}
           {version.partial && <Tag tone="warning">{t('project.history.partial')}</Tag>}
         </span>
-        <span className="dsh-projects__history-result-summary">{version.text}</span>
+        <span className="dsh-projects__history-result-summary">{historySummaryText(version, t)}</span>
       </ListRow>)}
       {result?.limitations.map(limitation => <p key={limitation}>{t('project.history.limitations', { value: limitation })}</p>)}
       {result?.nextCursor !== undefined && !loading && <Button variant="outline" size="sm" type="button"
@@ -747,17 +834,38 @@ function HistoryReadPanel({
   detail,
   t,
   onLocate,
+  recorded = false,
 }: {
   readonly state: HistoryReadPanelState;
   readonly detail: ProjectDetail;
   readonly t: Translate;
   readonly onLocate?: (source: NativeProjectSource, read: ProjectHistoryReadResult) => void;
+  readonly recorded?: boolean;
 }): ReactNode {
   const unavailable = sourceInvalidation(detail, state.source.hostSessionId);
   const result = unavailable === undefined ? state.result : {
     status: "unavailable" as const, found: false, items: [], limitations: [],
     reason: unavailableSourceText(unavailable.kind, t),
   };
+  if (recorded && result.status !== "unavailable" && result.found) {
+    const targets = result.items.filter(item => item.isTarget), context = result.items.filter(item => !item.isTarget);
+    const limitations = [...new Set([...result.limitations, ...targets.flatMap(item => item.limitations ?? [])])];
+    return <section className="dsh-projects__history-record-reader">
+      <VisibleItems items={targets} detail={detail} t={t} recorded />
+      <details className="dsh-projects__history-record-details">
+        <summary>{t("project.history.recordDetails")}</summary>
+        <section aria-label={t("project.history.originalRecord")}>
+          <h3>{t("project.history.originalRecord")}</h3>
+          {targets.map(item => <div key={`${item.seq}:${item.kind}`} className="dsh-projects__source-text" data-project-history-raw="">{item.text}</div>)}
+        </section>
+        {limitations.map(limitation => <p key={limitation} className="dsh-projects__history-meta">{limitation}</p>)}
+        {context.length > 0 && <section aria-label={t("project.history.surroundingRecords")}>
+          <h3>{t("project.history.surroundingRecords")}</h3>
+          <VisibleItems items={context} detail={detail} t={t} />
+        </section>}
+      </details>
+    </section>;
+  }
   return (
     <>
       {result.status === "partial" && (
@@ -860,7 +968,7 @@ function ProjectList({
           aria-label={t("list.open", { name: project.name })} onClick={() => { setMenuTarget(undefined); onOpen(project.id); }}
           icon={<IconProjectAddOutlineRegular size={24} />}
           trailing={<><span className="dsh-projects__project-meta"><time dateTime={project.updatedAt}>
-            {new Date(project.updatedAt).toLocaleDateString()}</time></span>
+            {formatUiDate(project.updatedAt, t, { dateOnly: true })}</time></span>
             <span className="dsh-projects__entry-arrow" aria-hidden="true"><IconChevronLeftOutlineRegular size={18} /></span></>}>
           <Tooltip label={project.name}><span className="dsh-projects__project-name projects-ui__list-title">{project.name}{project.archived && <Tag tone="quiet">{t("list.archived.tag")}</Tag>}</span></Tooltip>
           <Tooltip label={projectWorkspace(project, t("project.workspace.empty"))}>
@@ -884,10 +992,24 @@ function ProjectList({
   </>;
 }
 
+interface ProjectWorkspaceError {
+  readonly reason: "absolute-required" | "not-found" | "not-directory" | "unreadable";
+  readonly message: string;
+  readonly details?: unknown;
+}
+
+function workspaceCreationErrorKey(reason: ProjectWorkspaceError["reason"]) {
+  return ({ "absolute-required": "create.workspace.error.absoluteRequired", "not-found": "create.workspace.error.notFound",
+    "not-directory": "create.workspace.error.notDirectory", "unreadable": "create.workspace.error.unreadable" } as const)[reason];
+}
+
 function CreateProjectForm({
   t,
   busy,
   error,
+  errorDetails,
+  workspaceError,
+  onWorkspaceChange,
   onSubmit,
   onCancel,
   pickWorkspaceDirectory,
@@ -896,17 +1018,32 @@ function CreateProjectForm({
   readonly busy: boolean;
   readonly pickWorkspaceDirectory?: (() => Promise<string | null>) | undefined;
   readonly error?: string | undefined;
+  readonly errorDetails?: string | undefined;
+  readonly workspaceError?: ProjectWorkspaceError | undefined;
+  readonly onWorkspaceChange: () => void;
   readonly onSubmit: (input: {
     readonly name: string;
+    readonly instructions: string;
     readonly workspace: string;
   }) => void;
   readonly onCancel: () => void;
 }): ReactNode {
   const workspaceFieldId = useId();
   const nameFieldId = useId();
+  const instructionsFieldId = useId();
+  const instructionsHelpId = useId();
+  const formId = useId();
   const nameErrorId = useId();
+  const workspaceErrorId = useId();
   const nameInput = useRef<HTMLInputElement>(null);
+  const workspaceInput = useRef<HTMLInputElement>(null);
+  useLayoutEffect(() => {
+    const input = workspaceInput.current;
+    if (workspaceError !== undefined && !busy && input?.isConnected && input.closest("[hidden], [inert], [aria-hidden='true']") === null)
+      input.focus({ preventScroll: true });
+  }, [workspaceError, busy]);
   const [name, setName] = useState("");
+  const [instructions, setInstructions] = useState("");
   const [nameInvalid, setNameInvalid] = useState(false);
   const [workspace, setWorkspace] = useState("");
   const [discardOpen, setDiscardOpen] = useState(false);
@@ -920,32 +1057,39 @@ function CreateProjectForm({
     setChoosingDirectory(true); setDirectoryError(undefined);
     try {
       const path = await pickWorkspaceDirectory();
-      if (request === directoryRequest.current && path !== null) setWorkspace(path);
+      if (request === directoryRequest.current && path !== null) { setWorkspace(path); onWorkspaceChange(); }
     } catch {
       if (request === directoryRequest.current) setDirectoryError(t("create.workspace.choose.error"));
     } finally { if (request === directoryRequest.current) setChoosingDirectory(false); }
   };
   const requestClose = (): void => {
     if (busy) return;
-    if (name !== "" || workspace !== "") setDiscardOpen(true);
+    if (name !== "" || instructions !== "" || workspace !== "") setDiscardOpen(true);
     else onCancel();
   };
   return (
     <>
     <Modal open title={t("create.title")} closeLabel={t("create.cancel")} onClose={requestClose}
-      className="dsh-projects__create-dialog">
+      className="dsh-projects__create-dialog" contentClassName="dsh-projects__create-content"
+      footer={<><Button variant="outline" size="md" type="button" disabled={busy} onClick={requestClose}>
+        {t("create.cancel")}
+      </Button><Button variant="primary" size="md" type="submit" form={formId} disabled={busy}>
+        {busy && <StateDot state="ongoing" />}{t("create.submit")}
+      </Button></>}>
     <form
-      className="dsp-form-section"
+      id={formId}
+      className="dsp-form-section dsh-projects__create-form"
       noValidate
       onSubmit={(event) => {
         event.preventDefault();
         if (busy) return;
         if (name.trim() === "") { setNameInvalid(true); nameInput.current?.focus(); return; }
         setNameInvalid(false);
-        onSubmit({ name, workspace });
+        onSubmit({ name, instructions, workspace });
       }}
     >
-      {error !== undefined && <ErrorState inline title={error} />}
+      {error !== undefined && <ErrorState inline title={error}
+        diagnostic={errorDetails === undefined ? undefined : { label: t("create.errorDetails"), content: errorDetails }} />}
       <div className="dsh-projects__field dsp-field">
         <label htmlFor={nameFieldId}>{t("create.name.label")}</label>
         <Input
@@ -966,31 +1110,35 @@ function CreateProjectForm({
         {nameInvalid && <span id={nameErrorId} className="projects-ui__field-error" role="alert">{t("whole.panel.projectNameRequired")}</span>}
       </div>
       <div className="dsh-projects__field dsp-field">
+        <label htmlFor={instructionsFieldId}>{t("create.instructions.label")}</label>
+        <Textarea id={instructionsFieldId} rows={6} value={instructions} disabled={busy}
+          aria-describedby={instructionsHelpId} placeholder={t("create.instructions.placeholder")}
+          onChange={event => setInstructions(event.target.value)} />
+        <small id={instructionsHelpId}>{t("create.instructions.note")}</small>
+      </div>
+      <div className="dsh-projects__field dsp-field">
         <label htmlFor={workspaceFieldId}>{t("create.workspace.label")}</label>
         <span className="dsh-projects__workspace-picker">
         {pickWorkspaceDirectory !== undefined && <Button variant="outline" size="sm" type="button"
           icon={<IconFolderOpenOutlineRegular size={16} />} disabled={busy || choosingDirectory}
           onClick={() => { void chooseDirectory(); }}>{t(choosingDirectory ? "create.workspace.choosing" : "create.workspace.choose")}</Button>}
         <Input id={workspaceFieldId}
+          ref={workspaceInput}
+          aria-invalid={workspaceError !== undefined || undefined}
+          aria-describedby={workspaceError === undefined ? undefined : workspaceErrorId}
           value={workspace}
           placeholder={t("create.workspace.placeholder")}
           disabled={busy}
           onChange={(event) => {
-            setWorkspace(event.target.value);
+            setWorkspace(event.target.value); onWorkspaceChange();
           }}
         />
         </span>
+        {workspaceError !== undefined && <ErrorState inline id={workspaceErrorId}
+          title={t(workspaceCreationErrorKey(workspaceError.reason))}
+          diagnostic={{ label: t("create.errorDetails"), content: JSON.stringify({ message: workspaceError.message, details: workspaceError.details }, null, 2) }} />}
         {directoryError !== undefined && <ErrorState inline title={directoryError} />}
         <span className="dsh-projects__hint">{t("create.workspace.note")}</span>
-      </div>
-      <div className="dsh-projects__form-actions">
-        <Button variant="outline" size="md" type="button" disabled={busy} onClick={requestClose}>
-          {t("create.cancel")}
-        </Button>
-        <Button variant="primary" size="md" type="submit" disabled={busy}>
-          {busy && <StateDot state="ongoing" />}
-          {t("create.submit")}
-        </Button>
       </div>
     </form>
     </Modal>
@@ -1002,20 +1150,92 @@ function CreateProjectForm({
   );
 }
 
+interface ExecutionCreationIssue {
+  readonly message: string;
+  readonly code?: string;
+  readonly details?: unknown;
+  readonly partial: boolean;
+  readonly sessionId?: string;
+  readonly carrierId?: string;
+  readonly checking?: boolean;
+  readonly checkedDetail?: ProjectDetail;
+  readonly readError?: string;
+  readonly submittedTitle?: string;
+}
+
+function creationError(error: unknown): Pick<ExecutionCreationIssue, "message" | "code" | "details"> {
+  const value = error !== null && typeof error === "object" ? error as { message?: unknown; code?: unknown; details?: unknown } : undefined;
+  return { message: typeof value?.message === "string" ? value.message : String(error),
+    ...(typeof value?.code === "string" ? { code: value.code } : {}),
+    ...(value?.details === undefined ? {} : { details: value.details }) };
+}
+
+/** Exact confirmed membership permits an explicit open attempt; it does not prove full journal readability. */
+function checkedExecutionCreation(issue: ExecutionCreationIssue): ProjectSessionRecord | undefined {
+  const detail = issue.checkedDetail;
+  const session = detail?.sessions.find(row => row.id === issue.sessionId && row.role === "execution");
+  if (detail === undefined || session === undefined || session.hostSessionId.trim() === ""
+    || issue.carrierId !== undefined && session.hostSessionId !== issue.carrierId
+    || detail.project.sourceLifecycle !== undefined || detail.unavailableSources.some(row => row.hostSessionId === session.hostSessionId)) return undefined;
+  const carrier = session.carriers?.find(row => row.isCurrent && row.hostSessionId === session.hostSessionId);
+  return carrier?.sourceKind === "available" && carrier.sessionCreatedAt !== undefined ? session : undefined;
+}
+
+function ExecutionCreationNotice({ issue, t, busy, previous, retainedIssue, onCheck, onViewList, onOpen, onStartAnother }: {
+  readonly issue: ExecutionCreationIssue;
+  readonly t: Translate;
+  readonly busy: boolean;
+  readonly previous?: boolean;
+  readonly retainedIssue?: ExecutionCreationIssue;
+  readonly onStartAnother?: () => void;
+  readonly onCheck: () => void;
+  readonly onViewList: () => void;
+  readonly onOpen: (detail: ProjectDetail, session: ProjectSessionRecord) => void;
+}): ReactNode {
+  const session = checkedExecutionCreation(issue);
+  return <ErrorState inline title={t("sessions.new.failure")}
+    description={previous ? t("sessions.new.anotherWarning") : issue.partial ? t("sessions.new.partial") : t("sessions.new.failureHelp")}
+    diagnostic={{ label: t("sessions.new.details"), content: JSON.stringify({ message: issue.message, code: issue.code,
+      details: issue.details, readError: issue.readError, previous: retainedIssue === undefined ? undefined : {
+        message: retainedIssue.message, code: retainedIssue.code, details: retainedIssue.details } }, null, 2) }}>
+    {issue.partial && <>
+      <p role="status">{issue.checking ? t("sessions.new.checking") : session === undefined
+        ? t("sessions.new.unresolved") : t("sessions.new.checked", { name: session.title })}</p>
+      {issue.readError !== undefined && <p>{t("sessions.new.readFailure")}</p>}
+      <div className="dsh-projects__form-actions">
+        <Button variant="outline" size="sm" type="button" disabled={busy || issue.checking} onClick={onCheck}>{t("sessions.new.recheck")}</Button>
+        <Button variant="ghost" size="sm" type="button" disabled={busy || issue.checking} onClick={onViewList}>{t("sessions.new.viewList")}</Button>
+        {onStartAnother !== undefined && <Button variant="outline" size="sm" type="button" disabled={busy || issue.checking} onClick={onStartAnother}>{t("sessions.new.startAnother")}</Button>}
+        {session !== undefined && <Button variant="primary" size="sm" type="button" disabled={busy || issue.checking}
+          onClick={() => onOpen(issue.checkedDetail!, session)}>{t("sessions.new.openExisting")}</Button>}
+      </div>
+    </>}
+    {issue.submittedTitle !== undefined && <p>{issue.submittedTitle}</p>}
+    {retainedIssue !== undefined && <div role="status"><p>{t("sessions.new.anotherWarning")}</p>
+      {retainedIssue.submittedTitle !== undefined && <p>{retainedIssue.submittedTitle}</p>}
+    </div>}
+  </ErrorState>;
+}
+
 function CreateExecutionSessionForm({
   t,
   busy,
+  title,
+  blocked,
+  notice,
+  onChange,
   onSubmit,
   onCancel,
 }: {
   readonly t: Translate;
   readonly busy: boolean;
-  readonly onSubmit: (title: string, workspace?: { readonly path: string } | null) => void;
+  readonly title: string;
+  readonly blocked: boolean;
+  readonly notice?: ReactNode;
+  readonly onChange: (title: string) => void;
+  readonly onSubmit: (title: string) => void;
   readonly onCancel: () => void;
 }): ReactNode {
-  const [title, setTitle] = useState("");
-  const [location, setLocation] = useState("default");
-  const [workspace, setWorkspace] = useState("");
   const nameInput = useRef<HTMLInputElement>(null);
   useLayoutEffect(() => {
     const input = nameInput.current;
@@ -1026,8 +1246,8 @@ function CreateExecutionSessionForm({
       className="dsh-projects__form dsp-form-section"
       onSubmit={(event) => {
         event.preventDefault();
-        if (location === "other" && workspace.trim() === "") return;
-        onSubmit(title, location === "project" ? null : location === "other" ? { path: workspace.trim() } : undefined);
+        if (busy || blocked) return;
+        onSubmit(title);
       }}
     >
       <label className="dsh-projects__field dsp-field">
@@ -1037,30 +1257,15 @@ function CreateExecutionSessionForm({
           value={title}
           placeholder={t("sessions.new.placeholder")}
           disabled={busy}
-          onChange={(event) => {
-            setTitle(event.target.value);
-          }}
+          onChange={(event) => onChange(event.target.value)}
         />
       </label>
-      <label className="dsh-projects__field dsp-field">
-        <span>{t("sessions.new.location")}</span>
-        <Select aria-label={t("sessions.new.location")} value={location} disabled={busy} onValueChange={value => { setLocation(value); }}>
-          <option value="default">{t("sessions.new.location.default")}</option>
-          <option value="project">{t("sessions.new.location.project")}</option>
-          <option value="other">{t("sessions.new.location.other")}</option>
-        </Select>
-      </label>
-      {location === "other" && <label className="dsh-projects__field dsp-field">
-        <span>{t("sessions.new.location.path")}</span>
-        <Input aria-label={t("sessions.new.location.path")} required value={workspace}
-          disabled={busy} onChange={event => { setWorkspace(event.target.value); }} />
-      </label>}
-      <p className="dsh-projects__hint">{t("sessions.new.location.note")}</p>
+      {notice}
       <div className="dsh-projects__form-actions">
         <Button variant="ghost" size="sm" type="button" disabled={busy} onClick={onCancel}>
           {t("sessions.new.cancel")}
         </Button>
-        <Button variant="primary" size="sm" type="submit" disabled={busy}>
+        <Button variant="primary" size="sm" type="submit" disabled={busy || blocked}>
           {busy && <StateDot state="ongoing" />}
           {t("sessions.new.submit")}
         </Button>
@@ -1113,6 +1318,10 @@ function SessionsOverview({
   creatingSession,
   busy,
   allowCreate,
+  creationTitle,
+  creationBlocked,
+  creationNotice,
+  onCreationTitleChange,
   onShowCreate,
   onCreate,
   onOpenExecution,
@@ -1129,8 +1338,12 @@ function SessionsOverview({
   readonly creatingSession: boolean;
   readonly busy: boolean;
   readonly allowCreate: boolean;
+  readonly creationTitle: string;
+  readonly creationBlocked: boolean;
+  readonly creationNotice?: ReactNode;
+  readonly onCreationTitleChange: (title: string) => void;
   readonly onShowCreate: () => void;
-  readonly onCreate: (title: string, workspace?: { readonly path: string } | null) => void;
+  readonly onCreate: (title: string) => void;
   readonly onOpenExecution: (session: ProjectSessionRecord) => void;
   readonly onContinueDeletion: (result: ProjectSessionDeletionResult) => void;
   readonly onOpenHistory: (opener?: HTMLElement) => void;
@@ -1154,8 +1367,17 @@ function SessionsOverview({
   const executions = detail.sessions.filter(
     (session) => session.role === "execution" && session.archived === archivedList,
   );
+  if (allowCreate && creatingSession) return (
+    <section className="dsh-projects__overview-block dsh-projects__sessions-overview">
+      <h2>{t(creationBlocked ? "sessions.new.details" : "sessions.new")}</h2>
+      <CreateExecutionSessionForm key={creationBlocked ? "result" : "draft"} t={t} busy={busy} title={creationTitle} blocked={creationBlocked}
+        notice={creationNotice} onChange={onCreationTitleChange} onSubmit={onCreate}
+        onCancel={() => { cancelFocus.current = true; onShowCreate(); }} />
+    </section>
+  );
   return (
     <section className="dsh-projects__overview-block dsh-projects__sessions-overview">
+      {creationNotice}
       <div className="dsh-projects__session-head">
         <h2>{t("sessions.title")}</h2>
         <div className="dsh-projects__session-actions">
@@ -1168,7 +1390,7 @@ function SessionsOverview({
             icon={<IconPlusOutlineRegular size={14} />}
             onClick={() => { createOpener.current = 0; onShowCreate(); }}
           >
-            {t("sessions.new")}
+            {t(creationBlocked ? "sessions.new.details" : "sessions.new")}
           </Button>
         )}
         </div>
@@ -1178,14 +1400,6 @@ function SessionsOverview({
           { value: "active", label: t("list.filter.active"), id: `${filterId}-active`, panelId: `${filterId}-active-panel` },
           { value: "archived", label: t("list.filter.archived"), id: `${filterId}-archived`, panelId: `${filterId}-archived-panel` },
         ]} onChange={value => setArchivedList(value === "archived")} />
-      {allowCreate && creatingSession && (
-        <CreateExecutionSessionForm
-          t={t}
-          busy={busy}
-          onSubmit={onCreate}
-          onCancel={() => { cancelFocus.current = true; onShowCreate(); }}
-        />
-      )}
       <div hidden role="tabpanel" id={`${filterId}-${archivedList ? "active" : "archived"}-panel`}
         aria-labelledby={`${filterId}-${archivedList ? "active" : "archived"}`} />
       <div className="dsh-projects__filter-panel" role="tabpanel" id={`${filterId}-${archivedList ? "archived" : "active"}-panel`}
@@ -1194,17 +1408,18 @@ function SessionsOverview({
         <EmptyState icon={<IconProjectAddOutlineRegular size={32} />} title={t("sessions.empty")}
           description={t("p3.history.sessions.emptyHint")}
           actions={allowCreate && !creatingSession ? <Button ref={element => { createTriggers.current[1] = element; }} variant="outline" size="sm"
-            onClick={() => { createOpener.current = 1; onShowCreate(); }}>{t("sessions.new")}</Button> : undefined} />
+            onClick={() => { createOpener.current = 1; onShowCreate(); }}>{t(creationBlocked ? "sessions.new.details" : "sessions.new")}</Button> : undefined} />
       ) : (
         <div className="dsh-projects__session-list">
           {executions.map((session) => (
             <div key={session.id} className="dsh-projects__session-row-shell">
             <ListRow className="dsh-projects__session-row"
-              aria-label={t("sessions.open", { name: session.title })} onClick={() => onOpenExecution(session)}>
+              aria-label={t("sessions.open", { name: session.title })} onClick={() => onOpenExecution(session)}
+              trailing={<IconChevronLeftOutlineRegular className="dsh-projects__entry-arrow" size={14} aria-hidden="true" />}>
               <Tooltip label={session.title}><span className="dsh-projects__session-name projects-ui__list-title">{session.title}</span></Tooltip>
               <span className="dsh-projects__session-subtitle projects-ui__list-description">
                 {t("project.conversation.execution")} · {t(session.archived ? "list.filter.archived" : "list.filter.active")}
-                {" · "}<time dateTime={session.updatedAt}>{new Date(session.updatedAt).toLocaleDateString()}</time>
+                {" · "}<time dateTime={session.updatedAt}>{formatUiDate(session.updatedAt, t, { dateOnly: true })}</time>
               </span>
             </ListRow>
             <ActionMenu label={t("p3.history.sessions.menu", { name: session.title })} items={[
@@ -1328,6 +1543,8 @@ export function ProjectsPanel({
   deleteProject,
   createProject,
   getProject,
+  readProjectSnapshot,
+  beginNavigation,
   libraryActions,
   openLibraryOriginal,
   listProjects,
@@ -1365,10 +1582,14 @@ export function ProjectsPanel({
   renderMainModelControl,
 }: ProjectPanelProps): ReactNode {
   const projectDetail = useProjectDetail((detail) => detail);
+  const currentProjectDetail = useRef(projectDetail);
+  currentProjectDetail.current = projectDetail;
+  const replyCommittedDetail = useRef<ProjectDetail>();
+  const overviewMountKey = useRef<{ readonly projectId: string; readonly updatedAt: string; readonly key: string }>();
   const projectWatchInterruption = useProjectWatchInterruption((value) => value);
   const projectNavigation = useProjectNavigation((navigation) => navigation);
   const conversationFileRequest = useProjectFileRequest(request => request);
-  const [conversationReading, setConversationReading] = useState<{ readonly request: ProjectConversationFileRequest; readonly scrollTop: number; readonly offset: number }>();
+  const [conversationReading, setConversationReading] = useState<ConversationReading>();
   const handledHistoryNavigation = useRef<number>();
   const [screen, setScreen] = useState<Screen>({ kind: "loading" });
   const listReadOwner = useRef(listProjects);
@@ -1396,13 +1617,10 @@ export function ProjectsPanel({
   const [showExecutionList, setShowExecutionList] = useState(false);
   const executionListRegion = useRef<HTMLElement>(null);
   const executionListFocus = useRef(false);
-  const [overviewPreferredWidth, setOverviewPreferredWidth] = useState(360);
-  const [overviewWidthMenuOpen, setOverviewWidthMenuOpen] = useState(false);
+  const [overviewPreferredWidth, setOverviewPreferredWidth] = useState(OVERVIEW_DEFAULT_WIDTH);
+  const [readingPreferredWidth, setReadingPreferredWidth] = useState(READING_DEFAULT_WIDTH);
   const [workspaceElement, setWorkspaceElement] = useState<HTMLDivElement | null>(null);
   const workspaceSize = useWorkspaceSize(workspaceElement);
-  useEffect(() => {
-    if (!overviewOpen || workspaceSize.viewportWidth < 1024) setOverviewWidthMenuOpen(false);
-  }, [overviewOpen, workspaceSize.viewportWidth]);
   const overviewTrigger = useRef<HTMLButtonElement>(null);
   const overviewClose = useRef<HTMLButtonElement>(null);
   useEffect(() => {
@@ -1447,6 +1665,9 @@ export function ProjectsPanel({
   const [sourceReturnView, setSourceReturnView] = useState<SideView>("sessions");
   const [libraryReturnView, setLibraryReturnView] = useState<"chat" | "sessions">("sessions");
   const [executionCreateOrigin, setExecutionCreateOrigin] = useState<"central" | "overview">();
+  const [executionCreations, setExecutionCreations] = useState<Record<string, { readonly title: string; readonly issue?: ExecutionCreationIssue; readonly previousIssue?: ExecutionCreationIssue }>>({});
+  const executionCreationOperation = useRef<{ readonly id: symbol; readonly epoch: number }>();
+  const executionCreatePending = useRef(new Set<string>());
   const [renameDraft, setRenameDraft] = useState<{ readonly projectId: string; readonly sessionId: string; readonly expectedRevision: number; readonly title: string }>();
   const [renameBusy, setRenameBusy] = useState(false);
   const [renameNotice, setRenameNotice] = useState("");
@@ -1474,17 +1695,19 @@ export function ProjectsPanel({
   const [sourcePanel, setSourcePanel] = useState<ProjectSourcePanelState>();
   const [historyReadPanel, setHistoryReadPanel] = useState<HistoryReadPanelState>();
   const [libraryReading, setLibraryReading] = useState<LibraryReading>();
-  const libraryPositions = useRef(new Map<string, number>());
-  const [readingHints, setReadingHints] = useState<Record<string, ReadingHint | { readonly conversation: { readonly request: ProjectConversationFileRequest; readonly scrollTop: number; readonly offset: number }; readonly mode: "feedback" }>>({});
+  const libraryPositions = useRef(new Map<string, ReadingScrollPosition>());
+  const [readingHints, setReadingHints] = useState<Record<string, ReadingHint | { readonly conversation: ConversationReading; readonly mode: "feedback" }>>({});
   const [sourceReadingReturn, setSourceReadingReturn] = useState<LibraryReading>();
   const libraryOrigin = useRef<ReadingOrigin>({ kind: "library" });
   const libraryReadEpoch = useRef(0);
   const libraryReadAbort = useRef<AbortController>();
   const [libraryScopeSessionId, setLibraryScopeSessionId] = useState<string>();
-  const [feedbackFocus, setFeedbackFocus] = useState<string>();
+  const [feedbackFocus, setFeedbackFocus] = useState<string | { readonly sessionId: string; readonly target: "region" }>();
   const [boardSource, setBoardSource] = useState<OverviewSourceView>();
   const sourceAbort = useRef<AbortController>();
   const [error, setError] = useState<string>();
+  const [projectWorkspaceError, setProjectWorkspaceError] = useState<ProjectWorkspaceError>();
+  const [projectCreationErrorDetails, setProjectCreationErrorDetails] = useState<string>();
   const [warning, setWarning] = useState<string>();
   const [lifecycleNotice, setLifecycleNotice] = useState<string>();
   const [projectLifecycleResult, setProjectLifecycleResult] = useState<
@@ -1497,6 +1720,7 @@ export function ProjectsPanel({
     readonly executionSessionId?: ProjectSessionRecord["id"] | undefined;
   }>();
   const viewEpoch = useRef(0);
+  const replyNavigation = useRef<AbortController>();
   const handledNavigation = useRef<ProjectPanelNavigation["id"]>();
   const sourceRequest = useRef(0);
   const focusView = useRef({ screen, visibleConversation, showExecutionList, overviewOpen, epoch: viewEpoch.current, navigationId: projectNavigation?.id });
@@ -1629,6 +1853,7 @@ export function ProjectsPanel({
   useEffect(
     () => () => {
       viewEpoch.current++;
+      replyNavigation.current?.abort();
       sourceRequest.current++;
       libraryReadEpoch.current++;
       sourceAbort.current?.abort();
@@ -1654,6 +1879,7 @@ export function ProjectsPanel({
     )
       return;
     handledNavigation.current = projectNavigation.id;
+    replyNavigation.current?.abort();
     const epoch = ++viewEpoch.current;
     const readingCurrentProject = projectNavigation.target.source !== undefined
       && screen.kind === "project" && screen.projectId === projectNavigation.detail.project.id;
@@ -1790,7 +2016,8 @@ export function ProjectsPanel({
         if (result.kind === "deleted") setLifecycleNotice(result.message);
         else setError(result.message);
       } catch (error: unknown) {
-        if (viewEpoch.current === epoch) setError(error instanceof Error ? error.message : t("deletion.error"));
+        console.error("[dsh-projects] deletion failed", error);
+        if (viewEpoch.current === epoch) setError(t("deletion.error"));
       } finally {
         finishLifecycle(operation);
       }
@@ -1849,7 +2076,8 @@ export function ProjectsPanel({
         if (current !== undefined) setRenameDraft(previous => previous === undefined ? undefined : { ...previous, expectedRevision: current.revision });
       }
     } catch (error) {
-      if (epoch === viewEpoch.current) setRenameNotice(error instanceof Error ? error.message : t("p5.panel.nameSaveUnconfirmed"));
+      console.error("[dsh-projects] session rename failed", error);
+      if (epoch === viewEpoch.current) setRenameNotice(t("p5.panel.nameSaveUnconfirmed"));
     } finally { if (epoch === viewEpoch.current) setRenameBusy(false); }
   };
 
@@ -1869,7 +2097,8 @@ export function ProjectsPanel({
       // must not select its target or replace either unrelated conversation owner.
       if (result.kind === 'failed') setError(result.message); else setLifecycleNotice(result.message);
     } catch (error) {
-      if (viewEpoch.current === epoch) setError(error instanceof Error ? error.message : t("p5.panel.stateUnreadableCompletionUnconfirmed"));
+      console.error("[dsh-projects] session lifecycle update failed", error);
+      if (viewEpoch.current === epoch) setError(t("p5.panel.stateUnreadableCompletionUnconfirmed"));
     } finally { finishLifecycle(operation); }
   };
 
@@ -1896,13 +2125,15 @@ export function ProjectsPanel({
       setProjectLifecycleResult({ stage: result.stage, sessions: result.sessions });
       if (result.kind === 'failed') setError(result.message); else setLifecycleNotice(result.message);
     } catch (error) {
-      if (viewEpoch.current === epoch) setError(error instanceof Error ? error.message : t("p5.panel.projectStateUnreadableCompletionUnconfirmed"));
+      console.error("[dsh-projects] project lifecycle update failed", error);
+      if (viewEpoch.current === epoch) setError(t("p5.panel.projectStateUnreadableCompletionUnconfirmed"));
     } finally {
       finishLifecycle(operation);
     }
   };
 
   const openProject = async (projectId: ProjectRecord["id"], executionSessionId?: string): Promise<void> => {
+    replyNavigation.current?.abort();
     const epoch = ++viewEpoch.current;
     setBusy(true);
     setError(undefined);
@@ -1954,12 +2185,14 @@ export function ProjectsPanel({
       } else if (detail.pendingRestores?.some(item => item.scope === "project")) setError(t("p3.history.projectRestoreRequired"));
       else setArchiveConfirmation({ kind: "project", projectId: detail.project.id, name: detail.project.name });
     } catch (error) {
-      if (epoch === viewEpoch.current) setError(error instanceof Error ? error.message : t("project.error"));
+      console.error("[dsh-projects] project action failed", error);
+      if (epoch === viewEpoch.current) setError(t("project.error"));
     } finally { if (epoch === viewEpoch.current) setBusy(false); }
   };
 
   const createProjectFromForm = async (input: {
     readonly name: string;
+    readonly instructions: string;
     readonly workspace: string;
   }): Promise<void> => {
     if (input.name.trim() === "") {
@@ -1969,12 +2202,14 @@ export function ProjectsPanel({
     const epoch = ++viewEpoch.current;
     setBusy(true);
     setError(undefined);
+    setProjectWorkspaceError(undefined); setProjectCreationErrorDetails(undefined);
     setWarning(undefined); setLifecycleNotice(undefined); setProjectLifecycleResult(undefined);
     let savedProject: ProjectRecord | undefined;
     let creationWarning: string | undefined;
     try {
       const created = await createProject({
         name: input.name.trim(),
+        ...(input.instructions === "" ? {} : { instructions: input.instructions }),
         ...(input.workspace.trim() === ""
           ? {}
           : { workspace: { path: input.workspace.trim() } }),
@@ -1983,11 +2218,12 @@ export function ProjectsPanel({
       const detail = created.detail;
       savedProject = detail.project;
       creationWarning = created.warning?.trim() === "" ? undefined : created.warning;
-      // RPC success may be partial: preserve its saved object and exact reason before native acquisition can fail.
+      // RPC success may be partial; preserve the saved object and keep the raw reason in diagnostics.
+      if (creationWarning !== undefined) console.warn("[dsh-projects] project main creation incomplete", creationWarning);
       setListRead(current => current.owner !== listProjects ? current : { ...current,
         projects: [detail.project, ...(current.projects ?? []).filter(project => project.id !== detail.project.id)],
       });
-      setWarning(creationWarning);
+      setWarning(creationWarning === undefined ? undefined : t('create.mainUnavailable'));
       setShowCreate(false);
       if (confirmedCreatedMain(detail) === undefined) {
         if (creationWarning === undefined) setWarning(t('create.mainUnavailable'));
@@ -1999,10 +2235,21 @@ export function ProjectsPanel({
       setOverviewOpen(false);
       resetSide();
       setSettingsWindow(undefined);
-    } catch {
+    } catch (error) {
       if (viewEpoch.current === epoch) {
-        if (savedProject === undefined) setError(t("create.error"));
-        else setWarning(creationWarning ?? t('create.mainUnavailable'));
+        if (savedProject === undefined) {
+          const failure = creationError(error);
+          if (failure.code === "projects/invalid-workspace") {
+            const reason = failure.details !== null && typeof failure.details === "object" && "reason" in failure.details ? failure.details.reason : undefined;
+            setProjectWorkspaceError({ reason: reason === "absolute-required" || reason === "not-found" || reason === "not-directory" ? reason : "unreadable",
+              message: failure.message, details: failure.details });
+          } else {
+            const rejected = failure.code !== undefined && ["gateway/bad-request", "projects/not-ready", "projects/closing", "projects/create-rejected"].includes(failure.code);
+            setError(rejected ? t("create.error") : t("create.unconfirmed"));
+            setProjectCreationErrorDetails([failure.message, failure.code, failure.details === undefined ? undefined : JSON.stringify(failure.details, null, 2)]
+              .filter(value => value !== undefined).join("\n"));
+          }
+        } else setWarning(t('create.mainUnavailable'));
       }
     } finally {
       if (viewEpoch.current === epoch) setBusy(false);
@@ -2010,6 +2257,7 @@ export function ProjectsPanel({
   };
 
   const returnToList = (): void => {
+    replyNavigation.current?.abort();
     viewEpoch.current++;
     release();
     setReferenceRefresh(undefined);
@@ -2024,9 +2272,12 @@ export function ProjectsPanel({
   const selectExecution = (
     detail: ProjectDetail,
     session: ProjectSessionRecord,
+    origin: "central" | "overview" = "central",
   ): void => {
+    replyNavigation.current?.abort();
     if (screen.kind === "project" && screen.projectId === detail.project.id && screen.references.executionSessionId === session.id) {
-      setVisibleConversation("execution"); setShowExecutionList(false); setOverviewOpen(false); setSideView("sessions");
+      setVisibleConversation("execution"); setShowExecutionList(false);
+      if (origin === "central") { setOverviewOpen(false); setSideView("sessions"); }
       setSettingsWindow(undefined); setFeedbackFocus(session.id); return;
     }
     viewEpoch.current++;
@@ -2039,8 +2290,7 @@ export function ProjectsPanel({
         references: activate(detail, session.id),
       });
       setVisibleConversation("execution"); setShowExecutionList(false);
-      setOverviewOpen(false);
-      setSideView("sessions");
+      if (origin === "central") { setOverviewOpen(false); setSideView("sessions"); }
       setFeedbackFocus(session.id);
       setExecutionCreateOrigin(undefined);
       setSettingsWindow(undefined);
@@ -2050,26 +2300,134 @@ export function ProjectsPanel({
     }
   };
 
-  const createExecution = async (title: string, workspace?: { readonly path: string } | null): Promise<void> => {
+  const openReplySession = useCallback(async (target: ReplySessionLinkTarget): Promise<void> => {
+    const original = focusView.current;
+    if (original.screen.kind !== "project" || original.screen.projectId !== target.projectId)
+      throw new Error("Reply session target does not belong to the displayed Project");
+    replyNavigation.current?.abort();
+    const abort = new AbortController();
+    replyNavigation.current = abort;
+    const epoch = viewEpoch.current;
+    const assertNavigation = beginNavigation();
+    const assertCurrent = (): Extract<Screen, { readonly kind: "project" }> => {
+      abort.signal.throwIfAborted();
+      assertNavigation();
+      const current = focusView.current;
+      if (epoch !== viewEpoch.current || current.screen.kind !== "project"
+        || current.screen.projectId !== target.projectId || current.navigationId !== original.navigationId) {
+        throw new DOMException("Reply session navigation was superseded or closed", "AbortError");
+      }
+      return current.screen;
+    };
+    try {
+      const before = currentProjectDetail.current;
+      let fresh = await readProjectSnapshot(target.projectId, abort.signal);
+      assertCurrent();
+      // A watch commit during the read can supersede its carrier/lifecycle facts.
+      // Read once more rather than publishing a response prepared before that commit.
+      if (currentProjectDetail.current !== before) {
+        const observed = currentProjectDetail.current;
+        fresh = await readProjectSnapshot(target.projectId, abort.signal);
+        assertCurrent();
+        if (currentProjectDetail.current !== observed)
+          throw new Error("Project session changed while reading its current entry; retry the link");
+      }
+      if (fresh.project.id !== target.projectId || fresh.project.sourceLifecycle !== undefined)
+        throw new Error("Reply Project is unavailable");
+      const readable = (session: ProjectSessionRecord | undefined): session is ProjectSessionRecord => {
+        if (session === undefined || session.projectId !== target.projectId
+          || (session.role !== "main" && session.role !== "execution") || session.hostSessionId === ""
+          || fresh.deletionResults.some(item => item.id === session.id)
+          || fresh.unavailableSources.some(item => item.hostSessionId === session.hostSessionId)) return false;
+        const carrier = session.carriers?.find(item => item.isCurrent && item.hostSessionId === session.hostSessionId);
+        return session.carriers === undefined || carrier !== undefined && carrier.sourceKind === "available" && carrier.closed?.reason !== "retired";
+      };
+      const session = fresh.sessions.find(item => item.id === target.sessionId);
+      const mains = fresh.sessions.filter(item => item.role === "main" && item.projectId === target.projectId);
+      const main = mains.length === 1 && (fresh.project.mainSessionId === undefined || mains[0]!.id === fresh.project.mainSessionId)
+        ? mains[0] : undefined;
+      if (!readable(session) || !readable(main) || session.role === "main" && session.id !== main.id)
+        throw new Error("Reply session is deleted, unavailable, or not a Project work session");
+      const current = assertCurrent();
+      const previousExecution = fresh.sessions.find(item => item.id === current.references.executionSessionId && item.role === "execution");
+      const executionId = session.role === "execution" ? session.id : readable(previousExecution) ? previousExecution.id : undefined;
+      // Commit only after the pure read and identity/lifecycle validation. Do not
+      // enter the old openTarget path, which owns source/sidebar reset semantics.
+      const references = activate(fresh, executionId);
+      replyCommittedDetail.current = fresh;
+      watchProject(fresh);
+      setScreen(previous => previous.kind === "project" && previous.projectId === fresh.project.id && previous.references === references
+        ? previous : { kind: "project", projectId: fresh.project.id, references });
+      setVisibleConversation(session.role); setShowExecutionList(false);
+      executionListFocus.current = false;
+      restoreFocus.current = undefined;
+      setFeedbackFocus({ sessionId: session.id, target: "region" });
+    } finally {
+      if (replyNavigation.current === abort) replyNavigation.current = undefined;
+    }
+  }, [readProjectSnapshot, beginNavigation, activate, watchProject]);
+
+  const checkExecutionCreation = async (projectId: string, issue: ExecutionCreationIssue, epoch: number, previous = false): Promise<void> => {
+    if (viewEpoch.current !== epoch) return;
+    if (executionCreationOperation.current?.epoch === epoch) return;
+    const operation = { id: Symbol(), epoch };
+    executionCreationOperation.current = operation;
+    setExecutionCreations(current => current[projectId] === undefined ? current : { ...current,
+      [projectId]: { ...current[projectId]!, [previous ? "previousIssue" : "issue"]: { ...issue, checking: true, readError: undefined } } });
+    try {
+      // Reading an uncertain result must not activate a carrier or reset the user's other views.
+      const detail = await getProject(projectId);
+      if (viewEpoch.current !== epoch || executionCreationOperation.current !== operation) return;
+      if (detail.project.id !== projectId) throw new Error("Creation result returned a different project");
+      watchProject(detail);
+      setExecutionCreations(current => current[projectId] === undefined ? current : { ...current,
+        [projectId]: { ...current[projectId]!, [previous ? "previousIssue" : "issue"]: { ...issue, checking: false, checkedDetail: detail, readError: undefined } } });
+    } catch (error) {
+      if (viewEpoch.current === epoch && executionCreationOperation.current === operation)
+        setExecutionCreations(current => current[projectId] === undefined ? current : { ...current,
+          [projectId]: { ...current[projectId]!, [previous ? "previousIssue" : "issue"]: { ...issue, checking: false, checkedDetail: undefined, readError: creationError(error).message } } });
+    } finally {
+      if (executionCreationOperation.current === operation) executionCreationOperation.current = undefined;
+    }
+  };
+
+  const readProjectForSettings = async (projectId: string): Promise<ProjectDetail> => {
+    const epoch = viewEpoch.current;
+    const fresh = await getProject(projectId);
+    if (fresh.project.id !== projectId) throw new Error("Project settings read returned a different project");
+    if (viewEpoch.current === epoch) watchProject(fresh);
+    return fresh;
+  };
+
+  const createExecution = async (title: string): Promise<void> => {
     if (
       screen.kind !== "project" ||
       projectDetail?.project.id !== screen.projectId ||
-      projectDetail.project.archived
+      projectDetail.project.archived || busy || executionCreatePending.current.has(screen.projectId) || executionCreationOperation.current?.epoch === viewEpoch.current ||
+      executionCreations[screen.projectId]?.issue?.partial
     )
       return;
+    const projectId = screen.projectId;
+    const previousSessions = new Set(projectDetail.sessions.map(session => session.id));
     const epoch = ++viewEpoch.current;
+    executionCreatePending.current.add(projectId);
+    setExecutionCreations(current => ({ ...current, [projectId]: { title, previousIssue: current[projectId]?.previousIssue } }));
     setBusy(true);
     setError(undefined);
+    let createdDetail: ProjectDetail | undefined;
+    let createdSession: ProjectSessionRecord | undefined;
     try {
       const detail = await createExecutionSession({
-        projectId: projectDetail.project.id,
+        projectId,
         ...(title.trim() === "" ? {} : { title: title.trim() }),
-        ...(workspace === undefined ? {} : { workspace }),
       });
       if (viewEpoch.current !== epoch) return;
-      const session = lastExecutionSession(detail);
-      if (session === undefined)
-        throw new Error("Projects createSession returned no execution session");
+      createdDetail = detail;
+      const added = detail.sessions.filter(session => session.role === "execution" && !previousSessions.has(session.id));
+      const session = added.length === 1 ? added[0] : undefined;
+      if (detail.project.id !== projectId || session === undefined)
+        throw new Error("Projects createSession returned no unique new execution session");
+      createdSession = session;
       watchProject(detail);
       setScreen({
         kind: "project",
@@ -2081,10 +2439,26 @@ export function ProjectsPanel({
       setSideView("sessions");
       setFeedbackFocus(session.id);
       setExecutionCreateOrigin(undefined);
+      setExecutionCreations(current => { const next = { ...current }; const previousIssue = current[projectId]?.previousIssue;
+        if (previousIssue === undefined) delete next[projectId]; else next[projectId] = { title: "", previousIssue }; return next; });
       setSettingsWindow(undefined);
-    } catch {
-      if (viewEpoch.current === epoch) setError(t("sessions.new.error"));
+    } catch (error) {
+      if (viewEpoch.current !== epoch) return;
+      const failure = creationError(error);
+      // Transport/unclassified failures do not prove that the writer rejected the request.
+      const rejected = failure.code !== undefined && ["gateway/bad-request", "projects/archived", "projects/not-ready", "projects/closing"].includes(failure.code);
+      const partial = !rejected || createdDetail !== undefined;
+      const details = failure.details !== null && typeof failure.details === "object"
+        ? failure.details as { projectId?: unknown; sessionId?: unknown; carrierId?: unknown } : undefined;
+      const issue: ExecutionCreationIssue = { ...failure, partial, submittedTitle: title,
+        ...(createdSession === undefined ? details?.projectId === projectId ? {
+          ...(typeof details.sessionId === "string" ? { sessionId: details.sessionId } : {}),
+          ...(typeof details.carrierId === "string" ? { carrierId: details.carrierId } : {}),
+        } : {} : { sessionId: createdSession.id, carrierId: createdSession.hostSessionId }) };
+      setExecutionCreations(current => ({ ...current, [projectId]: { title, issue, previousIssue: current[projectId]?.previousIssue } }));
+      if (partial) await checkExecutionCreation(projectId, issue, epoch);
     } finally {
+      executionCreatePending.current.delete(projectId);
       if (viewEpoch.current === epoch) setBusy(false);
     }
   };
@@ -2160,16 +2534,16 @@ export function ProjectsPanel({
     const epoch = ++libraryReadEpoch.current;
     libraryReadAbort.current?.abort();
     const abort = new AbortController(); libraryReadAbort.current = abort;
-    const scrollTop = libraryPositions.current.get(libraryPositionKey(screen.projectId, session.id, selection)) ?? 0;
-    setLibraryReading({ selection, sessionId: session.id, origin, loading: true, scrollTop });
+    const position = libraryPositions.current.get(libraryPositionKey(screen.projectId, session.id, selection)) ?? { scrollTop: 0, outerScrollTop: 0 };
+    setLibraryReading({ selection, sessionId: session.id, origin, loading: true, ...position });
     setOverviewOpen(true); setSideView("libraryFile");
     try {
       const value = await libraryActions.open({ projectId: screen.projectId, sessionId: session.id, location: selection.location }, abort.signal);
       if (epoch === libraryReadEpoch.current && !abort.signal.aborted)
-        setLibraryReading({ selection: { ...selection, name: value.name }, sessionId: session.id, origin, value, scrollTop });
+        setLibraryReading({ selection: { ...selection, name: value.name }, sessionId: session.id, origin, value, ...position });
     } catch (error) {
       if (epoch === libraryReadEpoch.current && !abort.signal.aborted)
-        setLibraryReading({ selection, sessionId: session.id, origin, error: error instanceof Error ? error.message : String(error), scrollTop });
+        setLibraryReading({ selection, sessionId: session.id, origin, error: error instanceof Error ? error.message : String(error), ...position });
     }
   };
 
@@ -2219,11 +2593,22 @@ export function ProjectsPanel({
       }
       return;
     }
-    const session = feedbackFocus === undefined ? undefined : projectDetail?.project.id === screen.projectId
-      ? projectDetail.sessions.find(item => item.id === feedbackFocus) : undefined;
+    const feedbackSessionId = typeof feedbackFocus === "string" ? feedbackFocus : feedbackFocus?.sessionId;
+    const session = feedbackSessionId === undefined ? undefined : projectDetail?.project.id === screen.projectId
+      ? projectDetail.sessions.find(item => item.id === feedbackSessionId) : undefined;
     const role = feedbackFocus === undefined && validRestoration && typeof restoration.target === "string"
       ? restoration.target : session?.role;
-    if (role === undefined || overviewOpen || role !== visibleConversation || role === "execution" && showExecutionList) return;
+    if (role === undefined || role !== visibleConversation || role === "execution" && showExecutionList) return;
+    if (typeof feedbackFocus === "object" && feedbackFocus.target === "region") {
+      if (!currentView() || conversationCommits[role] !== references
+        || role === "execution" && references.executionSessionId !== feedbackSessionId) return;
+      const region = role === "main" ? mainRegion.current : executionRegion.current;
+      if (region === null) return;
+      region.focus({ preventScroll: true });
+      setFeedbackFocus(current => current === feedbackFocus ? undefined : current);
+      return;
+    }
+    if (overviewOpen) return;
     const reference = role === "main" ? references.main : references.execution;
     if (reference === undefined || reference.readOnly) {
       if (reference?.readOnly && feedbackFocus !== undefined && currentView()) {
@@ -2255,10 +2640,13 @@ export function ProjectsPanel({
     if (session !== undefined && sourceReadingReturn !== undefined)
       setReadingHints(previous => ({ ...previous, [session.id]: { reading: sourceReadingReturn, mode: "source" } }));
     try { await locateProjectSource(screen.projectId, source, read); }
-    catch (error) { setError(error instanceof Error ? error.message : String(error)); }
+    catch (error) {
+      if (error !== null && typeof error === "object" && "name" in error && error.name === "AbortError") return;
+      console.error("[dsh-projects] source navigation failed", error); setError(t("p5.panel.sourceOpenFailed"));
+    }
   };
 
-  const returnConversationReading = async (reading: { readonly request: ProjectConversationFileRequest; readonly scrollTop: number; readonly offset: number }, feedback: boolean): Promise<void> => {
+  const returnConversationReading = async (reading: ConversationReading, feedback: boolean): Promise<void> => {
     if (reading.request.signal.aborted) { setError(t("p5.panel.readingContextEnded")); return; }
     try {
       if (feedback) setReadingHints(previous => ({ ...previous, [reading.request.sessionId]: { conversation: reading, mode: "feedback" } }));
@@ -2266,7 +2654,7 @@ export function ProjectsPanel({
       // 反馈后的续读仍消费这份活跃请求；真实文件 owner 的 close 会使它失效。
       if (!feedback) dismissConversationFile(reading.request.id);
       if (feedback) setFeedbackFocus(reading.request.sessionId);
-    } catch (error) { setError(error instanceof Error ? error.message : String(error)); }
+    } catch (error) { console.error("[dsh-projects] return to conversation failed", error); setError(t("p5.panel.returnConversationFailed")); }
   };
 
   const renderReadingHint = (sessionId: string): ReactNode => {
@@ -2317,8 +2705,9 @@ export function ProjectsPanel({
             }
             setOverviewOpen(true);
           } catch (error) {
+            console.error("[dsh-projects] board source navigation failed", error);
             if (epoch === viewEpoch.current && request === sourceRequest.current && !abort.signal.aborted)
-              setError(error instanceof Error ? error.message : String(error));
+              setError(t("p5.panel.sourceOpenFailed"));
           }
           return;
         }
@@ -2388,7 +2777,6 @@ export function ProjectsPanel({
     {deletionConfirmation !== undefined && <Modal open className="dsp-theme dsh-projects__confirmation"
       title={t("deletion.confirm.title", { name: deletionConfirmation.name })}
       closeLabel={t("deletion.cancel")} onClose={() => setDeletionConfirmation(undefined)}>
-      {deletionConfirmation.kind === "project" && <p className="dsh-projects__deletion-summary">{t("p3.history.deletion.summary")}</p>}
       <DeletionConfirmation target={deletionConfirmation} t={t}
         onCancel={() => setDeletionConfirmation(undefined)} onConfirm={() => beginDeletion(deletionConfirmation)} />
     </Modal>}
@@ -2439,6 +2827,8 @@ export function ProjectsPanel({
           runtimeNotice={projectWatchInterruption?.projectId === projectDetail.project.id
             ? <ProjectUpdatesInterrupted value={projectWatchInterruption} t={t} /> : undefined}
           detail={projectDetail} translate={t} actions={settingsActions} initialPage={settingsWindow.page}
+          pickWorkspaceDirectory={pickWorkspaceDirectory}
+          readProject={readProjectForSettings}
           initialNameEditing={settingsWindow.nameEditing} onClose={() => setSettingsWindow(undefined)}
           onOpenNativeModel={sessionId => { void openProject(projectDetail.project.id,
             projectDetail.sessions.find(session => session.id === sessionId)?.role === "execution" ? sessionId : undefined); }} />}
@@ -2454,6 +2844,7 @@ export function ProjectsPanel({
                 size="md"
                 icon={<IconProjectAddOutlineRegular size={16} />}
                 onClick={() => {
+                  setError(undefined); setProjectWorkspaceError(undefined); setProjectCreationErrorDetails(undefined);
                   setShowCreate(true);
                 }}
               >
@@ -2472,6 +2863,9 @@ export function ProjectsPanel({
                 t={t}
                 busy={busy}
                 error={error}
+                errorDetails={projectCreationErrorDetails}
+                workspaceError={projectWorkspaceError}
+                onWorkspaceChange={() => setProjectWorkspaceError(undefined)}
                 pickWorkspaceDirectory={pickWorkspaceDirectory}
                 onSubmit={(input) => {
                   void createProjectFromForm(input);
@@ -2553,21 +2947,29 @@ export function ProjectsPanel({
   const showExecutionChat = selectedExecution !== undefined && screen.references.execution !== undefined;
   const executionListVisible = visibleConversation === "execution" && (showExecutionList || !showExecutionChat);
   const executionPanelId = `${conversationTabsId}-${showExecutionList || !showExecutionChat ? "execution-list" : "execution"}-panel`;
-  const splitConversations = showExecutionChat && !executionListVisible && workspaceSize.viewportWidth >= 1600 && workspaceSize.width >= 1184;
-  const overviewMode = workspaceSize.viewportWidth < 1024 ? "fullscreen"
-    : !showExecutionChat && workspaceSize.viewportWidth >= 1440 && workspaceSize.width >= 1160 ? "inline" : "overlay";
-  const availableWidth = Math.max(0, workspaceSize.width);
-  const overviewMinWidth = Math.min(280, availableWidth);
-  const overviewMaxWidth = Math.min(availableWidth, Math.max(overviewMinWidth, Math.min(720, availableWidth - (overviewMode === "inline" ? 680 : 240))));
-  const overviewWidth = Math.min(overviewMaxWidth, Math.max(overviewMinWidth, overviewPreferredWidth));
+  const overviewReading = ["libraryFile", "conversationFile", "historyRead", "sources", "boardSource"].includes(sideView);
+  const priorOverviewKey = overviewMountKey.current;
+  if (priorOverviewKey?.projectId !== detail.project.id || priorOverviewKey.updatedAt !== detail.project.updatedAt) {
+    // A reply navigation refreshes identity metadata, not the user's open board.
+    // Independent later watch commits still retain the existing refresh behavior.
+    overviewMountKey.current = { projectId: detail.project.id, updatedAt: detail.project.updatedAt,
+      key: priorOverviewKey?.projectId === detail.project.id && replyCommittedDetail.current === detail
+        ? priorOverviewKey.key : detail.project.updatedAt };
+  }
+  const overviewLayout = resolveOverviewLayout(workspaceSize.width, overviewReading ? readingPreferredWidth : overviewPreferredWidth, overviewReading);
+  const { mode: overviewMode, minWidth: overviewMinWidth, maxWidth: overviewMaxWidth, width: overviewWidth } = overviewLayout;
+  const conversationWidth = overviewOpen ? overviewLayout.conversationWidth : workspaceSize.width;
+  const splitConversations = showExecutionChat && !executionListVisible && workspaceSize.viewportWidth >= 1600 && conversationWidth >= 1184;
   const showAllExecutions = (): void => {
+    replyNavigation.current?.abort();
     setFeedbackFocus(undefined); restoreFocus.current = undefined;
     executionListFocus.current = true;
     setShowExecutionList(true); setVisibleConversation("execution"); setOverviewOpen(false);
   };
   const navigateConversation = (role: "main" | "execution"): void => {
+    replyNavigation.current?.abort();
     const showList = role === "execution" && !showExecutionChat;
-    setShowExecutionList(showList); setVisibleConversation(role); setOverviewOpen(false);
+    setShowExecutionList(showList); setVisibleConversation(role);
     executionListFocus.current = showList && !conversationTabTraversal.current;
     const id = role === "main" ? detail.project.mainSessionId : selectedExecution?.id;
     if (conversationTabTraversal.current || showList) { setFeedbackFocus(undefined); restoreFocus.current = undefined; }
@@ -2579,6 +2981,12 @@ export function ProjectsPanel({
   const showHistory = sideView === "history";
   const showHistoryRead =
     sideView === "historyRead" && historyReadPanel !== undefined;
+  const recordedHistoryRead = showHistoryRead && historyReadPanel.source.kind === "native-event"
+    && isProjectUiRawRecordType(historyReadPanel.source.eventType);
+  const nativeHistoryRead = showHistoryRead && renderSourceConversation !== undefined && historyReadPanel?.source.kind === "native-event"
+    && !recordedHistoryRead
+    && historyReadPanel.result.found && historyReadPanel.result.status !== "unavailable"
+    && sourceInvalidation(detail, historyReadPanel.source.hostSessionId) === undefined;
   const openSessionFromSettings = (sessionId: string): void => {
     setSettingsWindow(undefined);
     scheduleDirty.current = false; setScheduleCloseConfirmation(false); setScheduleWindow(undefined);
@@ -2621,16 +3029,43 @@ export function ProjectsPanel({
     }}
   /></Tooltip>;
 
+  const creationDraft = executionCreations[detail.project.id];
+  const previousCreation = creationDraft?.issue === undefined && creationDraft?.previousIssue !== undefined;
+  const storedCreationIssue = creationDraft?.issue ?? creationDraft?.previousIssue;
+  const creationIssue = storedCreationIssue === undefined ? undefined : { ...storedCreationIssue,
+    ...(storedCreationIssue.checkedDetail === undefined ? {} : { checkedDetail: detail }),
+    checking: storedCreationIssue.checking && executionCreationOperation.current?.epoch === viewEpoch.current };
+  const creationNotice = creationIssue === undefined ? undefined : <ExecutionCreationNotice issue={creationIssue} t={t}
+    previous={previousCreation} retainedIssue={creationDraft?.issue === undefined ? undefined : creationDraft.previousIssue}
+    busy={busy || lifecycleBusy || renameBusy}
+    onCheck={() => { void checkExecutionCreation(detail.project.id, creationIssue, viewEpoch.current, previousCreation); }}
+    onStartAnother={previousCreation || !creationIssue.partial ? undefined : () => {
+      // Preparing an independent draft is not a retry and sends no request.
+      setExecutionCreations(current => ({ ...current, [detail.project.id]: { title: "", previousIssue: creationIssue } }));
+      setExecutionCreateOrigin(overviewOpen ? "overview" : "central");
+    }}
+    onViewList={() => {
+      setExecutionCreateOrigin(undefined);
+      setVisibleConversation("execution"); setShowExecutionList(true);
+      executionListFocus.current = true; setOverviewOpen(false);
+    }}
+    onOpen={(checked, session) => selectExecution(checked, session)} />;
   const sessionsOverview = (origin: "central" | "overview"): ReactNode => (
     <SessionsOverview detail={detail} t={t}
       creatingSession={executionCreateOrigin === origin}
-      busy={busy || lifecycleBusy || renameBusy}
+      creationTitle={creationDraft?.title ?? ""}
+      creationBlocked={creationDraft?.issue?.partial === true}
+      creationNotice={creationNotice}
+      onCreationTitleChange={title => setExecutionCreations(current => ({ ...current, [detail.project.id]: { title,
+        previousIssue: current[detail.project.id]?.previousIssue,
+        ...(current[detail.project.id]?.issue?.partial ? { issue: current[detail.project.id]!.issue } : {}) } }))}
+      busy={busy || lifecycleBusy || renameBusy || creationIssue?.checking === true}
       allowCreate={!detail.project.archived && !screen.references.main.readOnly && !pendingProjectRestore}
       onShowCreate={() => {
         if (!detail.project.archived && !screen.references.main.readOnly) setExecutionCreateOrigin(current => current === origin ? undefined : origin);
       }}
-      onCreate={(title, workspace) => { void createExecution(title, workspace); }}
-      onOpenExecution={session => selectExecution(detail, session)}
+      onCreate={title => { void createExecution(title); }}
+      onOpenExecution={session => selectExecution(detail, session, origin)}
       onContinueDeletion={continueExecutionDeletion}
       onOpenHistory={opener => {
         sideOpeners.current.history = opener; sideFocusRequest.current = { view: "history" };
@@ -2685,7 +3120,7 @@ export function ProjectsPanel({
     <ProjectConversationLifetime references={screen.references}><MemoryNoticeNavigationContext.Provider value={notice => {
       if (notice.projectId !== detail.project.id || settingsWindow !== undefined) return;
       setSettingsWindow({ page: "memory", memoryId: notice.memoryIds[0] });
-    }}><main className="dsh-projects dsp-theme">
+    }}><ProjectReplyLinksProvider projectId={detail.project.id} onOpen={openReplySession} t={t}><main className="dsh-projects dsp-theme">
       {operationDialogs}
       {error !== undefined && <><Feedback key={error} text={error} tone="error" onDone={() => {}} />
         <ErrorState title={error} {...(busy || lifecycleBusy ? {} : { retry: () => { void openProject(detail.project.id); } })} retryLabel={t("list.retry")} /></>}
@@ -2753,7 +3188,7 @@ export function ProjectsPanel({
       <div ref={setWorkspaceElement} className="dsh-projects__workspace"
         style={{ "--dsh-projects-overview-width": `${overviewWidth}px` } as CSSProperties}
         data-layout={splitConversations ? "split" : "single"} data-overview={overviewOpen ? overviewMode : "closed"}>
-        <div hidden={overviewOpen && overviewMode === "fullscreen"} className="dsh-projects__conversation-toolbar">
+        <div className="dsh-projects__conversation-toolbar">
         <div className="dsh-projects__conversation-tabs"
           onKeyDownCapture={event => { conversationTabTraversal.current = ["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key); }}
           onKeyUpCapture={() => { conversationTabTraversal.current = false; }}
@@ -2769,7 +3204,7 @@ export function ProjectsPanel({
         </div>
         {executionControls}
         </div>
-        <div className="dsh-projects__conversations" hidden={overviewOpen && overviewMode === "fullscreen"}>
+        <div className="dsh-projects__conversations">
         <section ref={executionListRegion} tabIndex={-1} hidden={!executionListVisible}
           id={`${conversationTabsId}-execution-list-panel`} role="tabpanel" aria-labelledby={`${conversationTabsId}-execution`}
           className="dsh-projects__conversation-seat" data-role="execution-list">
@@ -2793,8 +3228,8 @@ export function ProjectsPanel({
             <summary><span role="status">{t(pendingProjectRestore ? "p3.history.restoreReadonly" : "p3.history.archiveReadonly")}</span></summary>
             <p>{t(pendingProjectRestore ? "p3.history.projectRestoreDetails" : "p3.history.projectArchiveDetails")}</p>
           </details>}
-          {mainModelError !== undefined && <p className="dsh-projects__readonly" role="status">{t("p5.panel.mainModelUnknownReadOnly")}{mainModelError.message}
-          </p>}
+          {mainModelError !== undefined && <ErrorState inline title={t("p5.panel.mainModelUnknownReadOnly")}
+            diagnostic={{ label: t("p5.panel.errorDetails"), content: mainModelError.message }} />}
           {detail.project.mainSessionId !== undefined && renderReadingHint(detail.project.mainSessionId)}
           <div className="dsh-projects__project-main">
             <ProjectConversationReady t={t} ready={screen.references.inputReady} commitKey={screen.references}
@@ -2803,7 +3238,7 @@ export function ProjectsPanel({
                 : current.main === screen.references ? { ...current, main: undefined } : current)}>{renderConversation === undefined ? <SessionProvider session={screen.references.main.reference}>
               {renderSlot("projects.main.conversation", { focus: projectNavigation?.target.source === undefined && projectNavigation?.detail.project.id === detail.project.id && projectNavigation.target.kind === "main" && projectNavigation.target.sessionId === detail.project.mainSessionId && projectNavigation.target.focusEventSeq !== undefined ? { id: projectNavigation.id, eventSeq: projectNavigation.target.focusEventSeq, messageId: projectNavigation.target.focusMessageId } : undefined })}
             </SessionProvider> : renderConversation(screen.references.main, { readOnly: screen.references.main.readOnly, projectName: detail.project.name,
-              visible: !(overviewOpen && overviewMode === "fullscreen") && (splitConversations || visibleConversation === "main"),
+              visible: splitConversations || visibleConversation === "main",
               focus: projectNavigation?.target.source === undefined && projectNavigation?.detail.project.id === detail.project.id && projectNavigation.target.kind === "main" && projectNavigation.target.sessionId === detail.project.mainSessionId && projectNavigation.target.focusEventSeq !== undefined ? { id: projectNavigation.id, eventSeq: projectNavigation.target.focusEventSeq, messageId: projectNavigation.target.focusMessageId } : undefined })}</ProjectConversationReady>
           </div>
           <footer className="dsh-projects__conversation-footer"><small aria-label={t("p5.panel.mainUsageSummary")}><UsageSessionSummary translate={t} scope="session-history"
@@ -2828,8 +3263,8 @@ export function ProjectsPanel({
               <p>{t(pendingExecutionRestore ? "p3.history.executionRestoreDetails" : "p3.history.executionArchiveDetails")}
                 {detail.project.archived ? t("p3.history.projectRestoreFirst") : ""}</p>
             </details>}
-            {showExecutionChat && executionModelError !== undefined && <p className="dsh-projects__readonly" role="status">{t("p5.panel.executionModelUnknownReadOnly")}{executionModelError.message}
-            </p>}
+            {showExecutionChat && executionModelError !== undefined && <ErrorState inline title={t("p5.panel.executionModelUnknownReadOnly")}
+              diagnostic={{ label: t("p5.panel.errorDetails"), content: executionModelError.message }} />}
             {showExecutionChat && renderReadingHint(selectedExecution.id)}
             {showExecutionChat && lifecycleBusy && <LoadingState label={t("p5.panel.processingExecution")} rows={1} />}
             {selectedExecution !== undefined && screen.references.execution !== undefined && (
@@ -2845,7 +3280,7 @@ export function ProjectsPanel({
                     : current.execution === screen.references ? { ...current, execution: undefined } : current)}>{renderConversation === undefined ? <SessionProvider session={screen.references.execution.reference}>
                   {renderSlot("projects.execution.conversation", { focus: projectNavigation?.target.source === undefined && projectNavigation?.detail.project.id === detail.project.id && projectNavigation.target.kind === "execution" && projectNavigation.target.sessionId === selectedExecution.id && projectNavigation.target.focusEventSeq !== undefined ? { id: projectNavigation.id, eventSeq: projectNavigation.target.focusEventSeq, messageId: projectNavigation.target.focusMessageId } : undefined })}
                 </SessionProvider> : renderConversation(screen.references.execution, { readOnly: screen.references.execution.readOnly, projectName: detail.project.name,
-                  visible: !(overviewOpen && overviewMode === "fullscreen") && showExecutionChat && !executionListVisible && (splitConversations || visibleConversation === "execution") && !lifecycleBusy,
+                  visible: showExecutionChat && !executionListVisible && (splitConversations || visibleConversation === "execution") && !lifecycleBusy,
                   focus: projectNavigation?.target.source === undefined && projectNavigation?.detail.project.id === detail.project.id && projectNavigation.target.kind === "execution" && projectNavigation.target.sessionId === selectedExecution.id && projectNavigation.target.focusEventSeq !== undefined ? { id: projectNavigation.id, eventSeq: projectNavigation.target.focusEventSeq, messageId: projectNavigation.target.focusMessageId } : undefined })}</ProjectConversationReady>
               </div>
             )}
@@ -2859,27 +3294,11 @@ export function ProjectsPanel({
             aria-label={t("project.overview.panelTitle")} onKeyDown={event => {
               if (event.key === "Escape" && !event.defaultPrevented && !event.nativeEvent.defaultPrevented) { event.preventDefault(); event.stopPropagation(); closeOverview(); }
             }}>
-            {overviewMode !== "fullscreen" && <OverviewResizeHandle width={overviewWidth} min={overviewMinWidth} max={overviewMaxWidth}
-              onResize={setOverviewPreferredWidth} controls={`${sideTabsId}-sidebar`} label={t("project.overview.resize")}
+            {overviewMode === "inline" && <OverviewResizeHandle width={overviewWidth} min={overviewMinWidth} max={overviewMaxWidth}
+              onResize={overviewReading ? setReadingPreferredWidth : setOverviewPreferredWidth} controls={`${sideTabsId}-sidebar`} label={t("project.overview.resize")}
               formatValue={width => t("project.overview.width", { width })} />}
             <header className="dsh-projects__overview-head">
-              {overviewMode === "fullscreen" && <IconAction
-                icon={<IconChevronLeftOutlineRegular size={16} />} aria-label={t("project.overview.back")} onClick={closeOverview} />}
               <h2>{t("project.overview.panelTitle")}</h2>
-              {overviewMode !== "fullscreen" && <Menu open={overviewWidthMenuOpen} portal autoFocus
-                onClose={() => setOverviewWidthMenuOpen(false)}
-                items={[
-                  { id: "narrower", label: t("project.overview.narrower"), disabled: overviewWidth <= overviewMinWidth },
-                  { id: "wider", label: t("project.overview.wider"), disabled: overviewWidth >= overviewMaxWidth },
-                  { id: "default", label: t("project.overview.defaultWidth"), disabled: overviewPreferredWidth === 360 },
-                ]} onSelect={id => {
-                  setOverviewWidthMenuOpen(false);
-                  if (id === "default") setOverviewPreferredWidth(360);
-                  else setOverviewPreferredWidth(Math.min(overviewMaxWidth, Math.max(overviewMinWidth, overviewWidth + (id === "wider" ? 32 : -32))));
-                }} anchor={<Tooltip label={t("project.overview.widthOptions")}><IconAction
-                  icon={<IconChevronsUpDownOutlineRegular size={16} className="dsh-projects__width-options-icon" />}
-                  aria-label={t("project.overview.widthOptions")} aria-haspopup="menu" aria-expanded={overviewWidthMenuOpen}
-                  onClick={() => setOverviewWidthMenuOpen(value => !value)} /></Tooltip>} />}
               <IconAction ref={overviewClose} icon={<IconCloseOutlineRegular size={16} />}
                 aria-label={t("project.overview.close")} onClick={closeOverview} />
             </header>
@@ -2887,9 +3306,9 @@ export function ProjectsPanel({
               <SegmentedTabs className="dsh-projects__side-tab-items" label={t("p3.history.sidebar")}
                 value={sideTab} items={[
                   { value: "sessions", label: t("project.overview.title"), id: `${sideTabsId}-sessions`, panelId: `${sideTabsId}-sessions-panel` },
+                  { value: "board", label: t("p3.history.board.tab"), id: `${sideTabsId}-board`, panelId: `${sideTabsId}-board-panel` },
                   { value: "library", label: t("project.library.title"), id: `${sideTabsId}-library`, panelId: `${sideTabsId}-library-panel` },
                   { value: "schedule", label: t("p3.history.schedule.tab"), id: `${sideTabsId}-schedule`, panelId: `${sideTabsId}-schedule-panel` },
-                  { value: "board", label: t("p3.history.board.tab"), id: `${sideTabsId}-board`, panelId: `${sideTabsId}-board-panel` },
                 ]} onChange={view => {
                   if (view === "library" && sideView !== "library") {
                     setLibraryReturnView(visibleConversation === "execution" && showExecutionChat ? "chat" : "sessions");
@@ -2900,7 +3319,7 @@ export function ProjectsPanel({
                   setSideView(view);
                 }} />
             </nav>
-            {(["sessions", "library", "schedule", "board"] as const).filter(view => view !== sideTab).map(view =>
+            {(["sessions", "board", "library", "schedule"] as const).filter(view => view !== sideTab).map(view =>
               <div key={view} hidden role="tabpanel" id={`${sideTabsId}-${view}-panel`} aria-labelledby={`${sideTabsId}-${view}`} />)}
             {/* Leaf content keeps its existing reader/request owner; conversations live in the sibling workspace. */}
             <div ref={sideRegion} tabIndex={-1} className="dsh-projects__side-panel dsh-projects__overview-body" role="tabpanel" id={`${sideTabsId}-${sideTab}-panel`} aria-labelledby={`${sideTabsId}-${sideTab}`}>
@@ -2915,6 +3334,7 @@ export function ProjectsPanel({
                 ) : (
                   <LibraryPanel
                     translate={t}
+                    pickWorkspaceDirectory={pickWorkspaceDirectory}
                     headerLeading={showLibrary ? sideBackControl : undefined}
                     projectId={detail.project.id}
                     sessionId={librarySession.id}
@@ -2949,28 +3369,36 @@ export function ProjectsPanel({
                 />
               </div>
             ) : showHistory ? null : showHistoryRead ? (
-              <div className="dsh-projects__side-body">
-                {renderSourceConversation !== undefined && historyReadPanel?.source.kind === 'native-event'
-                  && historyReadPanel.result.found && historyReadPanel.result.status !== 'unavailable'
-                  && sourceInvalidation(detail, historyReadPanel.source.hostSessionId) === undefined
+              <div className={`dsh-projects__side-body${nativeHistoryRead ? " dsh-projects__side-body--history-reader" : ""}`}>
+                {nativeHistoryRead
                   ? <>
-                    {historyReadPanel.result.items.filter(item => item.isTarget).map(item => <SourceMetadata key={`${item.seq}:${item.kind}`} item={item} detail={detail} t={t} />)}
-                    {historyReadPanel.result.status === 'partial' && <p className="dsh-projects__history-meta" role="status"><Tag tone="warning">{t('project.history.partial')}</Tag></p>}
-                    {renderSourceConversation(detail, historyReadPanel.source, { readOnly: true })}
-                    {historyReadPanel.result.limitations.map((limitation, index) => <p className="dsh-projects__history-meta" key={index}>{t('project.history.limitations', { value: limitation })}</p>)}
+                    <header className="dsh-projects__history-reading-meta">
+                    {historyReadPanel.result.items.filter(item => item.isTarget).map(item => <Fragment key={`${item.seq}:${item.kind}`}>
+                      <SourceMetadata item={item} detail={detail} t={t} recorded />
+                      {item.partial && <p className="dsh-projects__history-record-notice" role="status">{t('project.history.partial')}</p>}
+                    </Fragment>)}
+                    {(historyReadPanel.result.status === 'partial' || historyReadPanel.result.limitations.length > 0) && <details className="dsh-projects__history-record-details">
+                      <summary>{t('project.history.recordDetails')}</summary>
+                      {historyReadPanel.result.status === 'partial' && <p className="dsh-projects__history-meta">{t('project.history.partial')}</p>}
+                      {historyReadPanel.result.limitations.map((limitation, index) => <p className="dsh-projects__history-meta" key={index}>{t('project.history.limitations', { value: limitation })}</p>)}
+                    </details>}
+                    </header>
+                    <div className="dsh-projects__history-reading-content">{renderSourceConversation(detail, historyReadPanel.source, { readOnly: true })}</div>
                   </>
                   : <HistoryReadPanel
                     state={historyReadPanel}
                     detail={detail}
                     t={t}
-                    onLocate={(source, read) => { void locateSource(source, read); }}
+                    recorded={recordedHistoryRead}
+                    onLocate={recordedHistoryRead ? undefined : (source, read) => { void locateSource(source, read); }}
                   />}
               </div>
             ) : sideView === "conversationFile" && conversationReading !== undefined ? (
               <div className="dsh-projects__side-body dsh-projects__side-body--reader dsh-projects__side-body--flush">
                 <ConversationFileReader translate={t} request={conversationReading.request} readConversationFile={readConversationFile}
-                  initialScrollTop={conversationReading.scrollTop} initialOffset={conversationReading.offset}
-                  onReadingPosition={({ offset, scrollTop }) => setConversationReading(previous => previous === undefined ? previous : { ...previous, offset, scrollTop })}
+                  initialScrollTop={conversationReading.scrollTop} initialOuterScrollTop={conversationReading.outerScrollTop} initialOffset={conversationReading.offset}
+                  initialPresentation={conversationReading.presentation}
+                  onReadingPosition={({ offset, ...position }) => setConversationReading(previous => previous === undefined ? previous : { ...previous, offset, ...position })}
                   onBack={() => { void returnConversationReading(conversationReading, false); }} backLabel={t("p3.history.returnConversation", { name: conversationReading.request.role === "main" ? t("project.main.label") : conversationReading.request.sessionTitle })}
                   onFeedback={() => { void returnConversationReading(conversationReading, true); }} feedbackLabel={t("p3.history.feedbackConversation", { name: conversationReading.request.role === "main" ? t("project.main.label") : conversationReading.request.sessionTitle })}
                 />
@@ -2980,11 +3408,12 @@ export function ProjectsPanel({
                 <LibraryReader translate={t} selection={libraryReading.selection} value={libraryReading.value}
                   initialFocusSource={libraryFocusSource.current}
                   loading={libraryReading.loading} error={libraryReading.error}
-                  initialScrollTop={libraryReading.scrollTop}
-                  onReadingScroll={scrollTop => setLibraryReading(previous => {
+                  initialScrollTop={libraryReading.scrollTop} initialOuterScrollTop={libraryReading.outerScrollTop}
+                  initialPresentation={libraryReading.presentation}
+                  onReadingPosition={position => setLibraryReading(previous => {
                     if (previous === undefined) return previous;
-                    libraryPositions.current.set(libraryPositionKey(detail.project.id, previous.sessionId, previous.selection), scrollTop);
-                    return { ...previous, scrollTop };
+                    libraryPositions.current.set(libraryPositionKey(detail.project.id, previous.sessionId, previous.selection), position);
+                    return { ...previous, ...position };
                   })}
                   onReload={() => { void openLibraryReading(libraryReading.selection, libraryReading.origin, libraryReading.sessionId); }}
                   onRead={selection => { void openLibraryReading(selection, libraryReading.origin, libraryReading.sessionId, libraryOpener.current); }}
@@ -2993,8 +3422,10 @@ export function ProjectsPanel({
                   onOpenSource={(source, opener) => { libraryFocusSource.current = source; setSourceReadingReturn(libraryReading); void openSources([source], "libraryFile", opener); }}
                   footer={<div className="dsh-projects__reader-footer">
                     {libraryReading.origin.kind !== "library" && <Button variant="ghost" size="sm" type="button"
+                      aria-label={libraryReading.origin.kind === "board" ? t("p3.history.returnBoard") : t("p3.history.feedbackConversation", { name: detail.sessions.find(session => session.id === (libraryReading.origin.kind === "session" ? libraryReading.origin.sessionId : ""))?.title ?? t("p3.history.originalConversation") })}
+                      title={libraryReading.origin.kind === "board" ? t("p3.history.returnBoard") : t("p3.history.feedbackConversation", { name: detail.sessions.find(session => session.id === (libraryReading.origin.kind === "session" ? libraryReading.origin.sessionId : ""))?.title ?? t("p3.history.originalConversation") })}
                       onClick={() => returnReadingToWork(libraryReading)}>
-                      {libraryReading.origin.kind === "board" ? t("p3.history.returnBoard") : t("p3.history.feedbackConversation", { name: detail.sessions.find(session => session.id === (libraryReading.origin.kind === "session" ? libraryReading.origin.sessionId : ""))?.title ?? t("p3.history.originalConversation") })}
+                      {libraryReading.origin.kind === "board" ? t("p3.history.returnBoard") : t("p3.library.feedback")}
                     </Button>}
                     {libraryReading.origin.kind === "session" && <small>{t("p3.history.draftKept")}</small>}
                   </div>}
@@ -3006,7 +3437,7 @@ export function ProjectsPanel({
                 {boardSource.message !== undefined && <p role="status">{boardSource.message}</p>}
                 {boardSource.rows.map(row => <article key={row.id} className="dsh-projects__record"><h4>{row.title}</h4>
                   {row.fields.map((field, index) => <p key={index} className="dsh-projects__overview-value"><strong>{field.label}{t("p5.common.colon")}</strong>{field.value}</p>)}
-                  {row.ownerUpdatedAt !== undefined && <p>{new Date(row.ownerUpdatedAt).toLocaleString()}</p>}
+                  {row.ownerUpdatedAt !== undefined && <p>{formatUiDate(row.ownerUpdatedAt, t)}</p>}
                 </article>)}
                 {boardSource.reference.kind === 'memory' && <Button variant="outline" size="sm" onClick={() => setSettingsWindow({ page: 'memory' })}>
                   {t('project.memory.editSettings')}
@@ -3020,7 +3451,7 @@ export function ProjectsPanel({
               <div className="dsh-projects__side-body dsh-projects__side-body--flush">
                 <OverviewPanel
                   translate={t}
-                  key={`${detail.project.updatedAt}:${unavailableDisposition}`}
+                  key={`${overviewMountKey.current!.key}:${unavailableDisposition}`}
                   projectId={detail.project.id}
                   actions={overviewActions}
                   onNavigate={(target) => {
@@ -3044,6 +3475,8 @@ export function ProjectsPanel({
           detail={detail}
           translate={t}
           actions={settingsActions}
+          pickWorkspaceDirectory={pickWorkspaceDirectory}
+          readProject={readProjectForSettings}
           initialPage={settingsWindow.page}
           initialSessionId={settingsWindow.sessionId}
           initialMemoryId={settingsWindow.memoryId}
@@ -3084,6 +3517,6 @@ export function ProjectsPanel({
             scheduleDirty.current = false; setScheduleCloseConfirmation(false); setScheduleWindow(undefined);
             setScheduleViewRevision(previous => previous + 1);
           }}>{t("create.discard.submit")}</Button></>} />}
-    </main></MemoryNoticeNavigationContext.Provider></ProjectConversationLifetime>
+    </main></ProjectReplyLinksProvider></MemoryNoticeNavigationContext.Provider></ProjectConversationLifetime>
   );
 }

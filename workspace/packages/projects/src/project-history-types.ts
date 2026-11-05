@@ -4,6 +4,11 @@ import type { CommunicationSavedPartSource } from './communication/types.ts'
 
 export type ProjectHistoryStatus = "ok" | "partial" | "unavailable";
 export type ProjectHistorySpeaker = NativeProjectSpeaker;
+/** Shared UI copy also defines the conservative width of an unnamed summary link. */
+export const PROJECT_HISTORY_SESSION_LINK_COPY = ['会话链接', 'Session link'] as const;
+export const PROJECT_HISTORY_PARTIAL_PREVIEW_COPY = ['回复片段，打开原文查看', 'Reply fragment. Open the original to read.'] as const;
+/** Presentation parts; an unlabeled canonical link is localized by the UI, never resolved by title. */
+export type ProjectHistoryDisplaySummary = readonly (string | { readonly kind: 'session-link' | 'partial-preview' })[];
 
 /** Current Project ownership facts supplied by the core runtime. */
 export interface ProjectHistoryMembership {
@@ -52,6 +57,8 @@ export interface ProjectHistoryReadRequest {
 /** A message candidate retains one real matching event; the group's other versions stay independently readable. */
 export interface ProjectHistorySearchItem extends NativeProjectSourceItem {
   readonly session: ProjectHistoryMembership;
+  /** Bounded UI-only projection; never original text or a source/match coordinate space. */
+  readonly displaySummary?: ProjectHistoryDisplaySummary;
   readonly excerpt?: { readonly unit: 'unicode-code-points'; readonly start: number; readonly end: number; readonly total: number };
   readonly match?: { readonly method: 'literal-case-insensitive'; readonly field: 'text'; readonly start: number; readonly end: number };
   readonly messageGroup?: {

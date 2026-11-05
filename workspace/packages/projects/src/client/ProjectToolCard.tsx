@@ -236,8 +236,8 @@ export function ProjectsToolCard({ block, openTarget, phase, t, toolName }: Proj
     setFailed(false)
     try {
       await openTarget(result.projectId, target)
-    } catch {
-      setFailed(true)
+    } catch (error) {
+      if (error === null || typeof error !== 'object' || !('name' in error) || error.name !== 'AbortError') setFailed(true)
     } finally {
       setOpening(undefined)
     }

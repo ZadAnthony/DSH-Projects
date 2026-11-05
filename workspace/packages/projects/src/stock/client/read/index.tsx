@@ -29,6 +29,7 @@ import type { ProjectPresentedFilesPorts } from '../capabilities/deliverables/in
 import type { ProjectNativeToolCapabilityPorts } from '../capabilities/contracts.ts'
 import { installProjectNativeToolViews } from '../capabilities/tool-views.ts'
 import { parseProjectSubagentChatAddress } from '../capabilities/subagent-address.ts'
+import { ProjectReplyLinksProvider, type ProjectReplyLinksNavigation } from '../../../client/ProjectReplySessionLinks.tsx'
 
 export { ProjectReadSessions, ProjectReadSession, projectReadOnlyError } from './sessions.ts'
 export type { ProjectReadRemotePort } from './sessions.ts'
@@ -50,17 +51,20 @@ export interface ProjectReadDomainOptions {
   readonly externalFiles?: ProjectPresentedFilesPorts['externalFiles']
   readonly selectedTools?: ProjectNativeToolCapabilityPorts
   readonly language?: string
+  /** Explicit capability bridge: uiRenderer.mount creates an independent React root. */
+  readonly replySessionNavigation?: ProjectReplyLinksNavigation | undefined
 }
 
 type ReaderRootProps = PropsRuntime<'root'> & PropsLocale<'projects'> & PropsRenderSlots<'conversation.view' | 'shell.overlay' | 'conversation.session.header.lineage' | 'conversation.session.header.actions'> & {
   readonly useReaderSelection: SnapshotSelectorHook<SessionReference | undefined>
   readonly useReaderError: SnapshotSelectorHook<string | undefined>
+  readonly replySessionNavigation?: ProjectReplyLinksNavigation | undefined
 }
-function ReaderRoot({ renderSlot, SessionProvider, useReaderSelection, useReaderError, useSessions, t }: ReaderRootProps) {
+function ReaderRoot({ renderSlot, SessionProvider, useReaderSelection, useReaderError, useSessions, t, replySessionNavigation }: ReaderRootProps) {
   const selected = useReaderSelection(value => value)
   const error = useReaderError(value => value)
   const title = useSessions(value => selected === undefined ? '' : value.byId[selected.sessionId]?.displayTitle ?? selected.sessionId)
-  return <div className="dsh-projects-native-reader" data-project-read-only="" style={{ display: 'flex', flex: 1, flexDirection: 'column', width: '100%', height: '100%', minHeight: 0 }}>
+  const content = <div className="dsh-projects-native-reader" data-project-read-only="" style={{ display: 'flex', flex: 1, flexDirection: 'column', width: '100%', height: '100%', minHeight: 0 }}>
     {error !== undefined && <p role="alert">{error}</p>}
     <SessionProvider session={selected} empty={() => <EmptyState role="status" title={t('wholeRead.recorded.select')} />}>
       <div data-project-reader-navigation="" style={{ display: 'flex', flexShrink: 0, alignItems: 'center' }}>
@@ -72,6 +76,8 @@ function ReaderRoot({ renderSlot, SessionProvider, useReaderSelection, useReader
     </SessionProvider>
     {renderSlot('shell.overlay', {})}
   </div>
+  return replySessionNavigation === undefined ? content : <ProjectReplyLinksProvider projectId={replySessionNavigation.projectId}
+    onOpen={replySessionNavigation.onOpen} t={t}>{content}</ProjectReplyLinksProvider>
 }
 
 export class ProjectReadDomain {
@@ -132,10 +138,24 @@ export class ProjectReadDomain {
     const conversation = new UiConversation(ctx, this.sessions)
     ctx.uiSession.provide({ hooks: ['conversation'], resolve: binding => ({ hooks: { conversation: conversation.binding(binding).snapshot } }) })
     installProjectChat(ctx, { fileReader: options.fileReader, focusOwner: this.focusOwner, allowBranch: false,
+      replySessionLinkSource: id => {
+        const source = options.fileReader.options.resolveBinding(id)
+        return source?.role === 'main' || source?.role === 'execution' ? { originProjectId: source.projectId, role: source.role } : undefined
+      },
       ...(options.renderCommunicationMessage === undefined ? {} : { renderCommunicationMessage: options.renderCommunicationMessage }) })
     applyTools(ctx); applyAttachments(ctx)
     // Only Chat and read-only overlays are declared. Composer, input, queue and controls have no slots or owners here.
-    ctx.slots.register({ name: 'root', locale: 'projects', inject: () => ({ hooks: { readerSelection: this.selection, readerError: this.sourceError } }), children: {
+    const replyNavigationOwner = options.replySessionNavigation
+    const replySessionNavigation: ProjectReplyLinksNavigation | undefined = replyNavigationOwner === undefined ? undefined : {
+      projectId: replyNavigationOwner.projectId,
+      onOpen: async target => {
+        if (this.disposed || this.projectId !== replyNavigationOwner.projectId || target.projectId !== this.projectId) {
+          throw new DOMException('Project Reader navigation owner is no longer current', 'AbortError')
+        }
+        await replyNavigationOwner.onOpen(target)
+      },
+    }
+    ctx.slots.register({ name: 'root', locale: 'projects', inject: () => ({ replySessionNavigation, hooks: { readerSelection: this.selection, readerError: this.sourceError } }), children: {
       'conversation.view': { kind: 'list', scope: 'session' }, 'shell.overlay': { kind: 'list', scope: 'root' },
       'conversation.session.header.lineage': { kind: 'single', scope: 'session' },
       'conversation.session.header.actions': { kind: 'list', scope: 'session' },

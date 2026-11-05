@@ -17,28 +17,26 @@ DeepSeek Harness 的本地项目协作插件，将多会话协作、长期上下
 
 ## 版本与环境
 
-当前预览版本为 `0.1.0-beta.1`。
+当前预览版本为 `0.1.0-beta.2`。
 
-本预览版已在 **macOS arm64（Apple silicon）与 DeepSeek Harness `0.2.1-rc.5`** 验证：Web 的源码构建、正常管理器安装、升级后的实际加载及重启回读；Desktop 的正常卸载、经公开安装包 URL 重装、启用、正常冷开及原项目、代表旧聊天、共同要求与共享记忆回读。Desktop 本轮保留原资料和配置，不涵盖空数据、新账户或无缓存首次安装；其他操作系统、Intel Mac 和其他宿主版本尚未验证。
-
-本次验证覆盖公开构建、提示词装配及上述实际安装和回读链路，系统功能与 Harness 实现按该实际范围通过本阶段验收。模型理解、记忆整理质量、接力判断及实际任务效果尚未验证。
+本版变化、实际受测范围与已知限制见 [Release 说明](https://github.com/ZadAnthony/DSH-Projects/releases/tag/v0.1.0-beta.2)。构建检查与实际安装分别说明；不从历史版本推定本版全部通过。模型理解和实际使用效果尚未验证。
 
 ## 安装
 
-安装包及 SHA-256 校验值见 [Releases](https://github.com/ZadAnthony/DSH-Projects/releases/tag/v0.1.0-beta.1)。插件运行时包名为 `@local/dsh-projects`。当前分发形式为预构建安装包，暂不提供 npm 安装或仓库源码链接直装。
+安装包及 SHA-256 校验值见 [Releases](https://github.com/ZadAnthony/DSH-Projects/releases/tag/v0.1.0-beta.2)。插件运行时包名为 `@local/dsh-projects`。当前分发形式为预构建安装包，暂不提供 npm 安装或仓库源码链接直装。
 
-**Desktop**：在 DSH `0.2.1-rc.5` App 中打开 **插件 → 添加插件 → 安装第三方插件**，粘贴以下公开安装包 URL；安装后点击 **立即启用**。正常退出并重开 App，在插件详情核对 `0.1.0-beta.1`、安装来源与运行状态。
+**Desktop**：在 DSH `0.2.1-rc.5` App 中打开 **插件 → 添加插件 → 安装第三方插件**，粘贴以下公开安装包 URL；安装后点击 **立即启用**。正常退出并重开 App，在插件详情核对 `0.1.0-beta.2`、安装来源与运行状态。
 
 ```text
-https://github.com/ZadAnthony/DSH-Projects/releases/download/v0.1.0-beta.1/dsh-projects-0.1.0-beta.1.tgz
+https://github.com/ZadAnthony/DSH-Projects/releases/download/v0.1.0-beta.2/dsh-projects-0.1.0-beta.2.tgz
 ```
 
 已有旧版时，先备份资料，再按管理器提示卸载旧插件并安装新版；正常卸载保留 Projects 数据和既有配置。若安装本地 `.tgz` 提示无法读取或 `EPERM`，可改用上述公开安装包 URL。
 
-**Web**：下载 [dsh-projects-0.1.0-beta.1.tgz](https://github.com/ZadAnthony/DSH-Projects/releases/download/v0.1.0-beta.1/dsh-projects-0.1.0-beta.1.tgz)，准备 Node.js 24 和可在终端运行的 `pnpm`。先正常停止已有 Web 服务，再在安装包所在目录运行：
+**Web**：下载 [dsh-projects-0.1.0-beta.2.tgz](https://github.com/ZadAnthony/DSH-Projects/releases/download/v0.1.0-beta.2/dsh-projects-0.1.0-beta.2.tgz)，准备 Node.js 24 和可在终端运行的 `pnpm`。先正常停止已有 Web 服务，再在安装包所在目录运行：
 
 ```sh
-npx --yes @deepseek-ai/dsh@0.2.1-rc.5 plugin --profile web add ./dsh-projects-0.1.0-beta.1.tgz
+npx --yes @deepseek-ai/dsh@0.2.1-rc.5 plugin --profile web add ./dsh-projects-0.1.0-beta.2.tgz
 npx --yes @deepseek-ai/dsh@0.2.1-rc.5 web
 ```
 

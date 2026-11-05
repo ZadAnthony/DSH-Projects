@@ -11,11 +11,12 @@ import { bytesToBase64 } from '@deepseek-ai/dsh-util-crypto'
 import type { ProjectUiTarget } from '../ui-host/types.ts'
 import type { ProjectNativeRemoteCapabilities } from './capabilities/contracts.ts'
 import type { ProjectClientRemotePort, FullProjectClientRemotePort, ProjectRemoteShimOptions, SessionCommandsRemote, ProjectRefreshEvent, ProjectClientRefreshFrame } from './remote/contracts.ts'
-import { ProjectNativeInteractions, type ProjectInteractionSessions } from './remote/interactions.ts'
+import { ProjectNativeInteractions, type ProjectInteractionSessions, type ProjectInteractionSubmission } from './remote/interactions.ts'
 import { ProjectNativeHostNotifications } from './native-host-notifications.ts'
 
 export type { ProjectClientRemotePort, FullProjectClientRemotePort, ProjectRemoteShimOptions, SessionCommandsRemote, ProjectRefreshEvent, ProjectClientRefreshFrame } from './remote/contracts.ts'
 export type { ProjectInteractionSessions } from './remote/interactions.ts'
+export type { ProjectInteractionSubmission } from './remote/interactions.ts'
 export interface SessionSubagentsRemote {
   prompt: ClientRemote['subagents']['prompt']
   interruptByParent: ClientRemote['subagents']['interruptByParent']
@@ -66,6 +67,7 @@ export class ProjectRemoteShim implements SessionRemotes, ProjectNativeRemoteCap
   private readonly pendingUploads = new Set<AbortController>()
   private readonly uploads = new Set<Promise<unknown>>()
   private readonly failures = new Set<(error: unknown) => void>()
+  private readonly interactionSubmissions = new Set<(state: ProjectInteractionSubmission) => void>()
   private sessions: ProjectInteractionSessions | undefined
   private readonly stopHostNotifications: (() => void) | undefined
 
@@ -77,7 +79,9 @@ export class ProjectRemoteShim implements SessionRemotes, ProjectNativeRemoteCap
   ) {
     const full = options.full
     const missing = async (operation: string): Promise<never> => unsupportedProjectClientOperation(operation)
-    this.interactions = new ProjectNativeInteractions(full, id => this.capture(id, false), options.mode === 'reader', error => this.failed(error))
+    this.interactions = new ProjectNativeInteractions(full, id => this.capture(id, false), options.mode === 'reader', error => this.failed(error), state => {
+      for (const listener of this.interactionSubmissions) listener(state)
+    })
     this.listeners['approval/request'] = this.interactions.approvals
     this.listeners['user-questions/request'] = this.interactions.questions
     this.session = {
@@ -251,6 +255,7 @@ export class ProjectRemoteShim implements SessionRemotes, ProjectNativeRemoteCap
     return () => { this.catalog.delete(listener) }
   }
   subscribeFailure(listener: (error: unknown) => void): () => void { this.failures.add(listener); return () => { this.failures.delete(listener) } }
+  subscribeInteractionSubmission(listener: (state: ProjectInteractionSubmission) => void): () => void { this.interactionSubmissions.add(listener); return () => { this.interactionSubmissions.delete(listener) } }
   private failed(error: unknown): void { for (const listener of this.failures) listener(error) }
   attachSessions(sessions: ProjectInteractionSessions): void {
     if (this.sessions !== undefined && this.sessions !== sessions) throw new Error('Projects client Session owner is already attached')
@@ -268,6 +273,6 @@ export class ProjectRemoteShim implements SessionRemotes, ProjectNativeRemoteCap
     for (const lifetime of this.pendingUploads) lifetime.abort()
     await Promise.allSettled([this.interactions.dispose(), ...this.uploads])
     for (const listeners of Object.values(this.listeners)) listeners.clear()
-    this.catalog.clear(); this.failures.clear()
+    this.catalog.clear(); this.failures.clear(); this.interactionSubmissions.clear()
   }
 }

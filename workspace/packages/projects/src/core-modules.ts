@@ -108,7 +108,12 @@ async function readMemorySource(access: ProjectsCoreAccess, project: MemoryProje
       return { projectId: project.projectId, isUserDecision: false, ...memoryFileText(file.absolutePath, file.data) }
     } catch (error) {
       signal?.throwIfAborted()
-      return { projectId: project.projectId, readable: false, isUserDecision: false, reason: error instanceof Error ? error.message : String(error) }
+      const code = error !== null && typeof error === 'object' && 'code' in error ? error.code : undefined
+      const reason = code === 'ENOENT' || code === 'workspace-file/not-found' ? '来源文件不存在，无法读取原始内容。'
+        : code === 'EACCES' || code === 'EPERM' || code === 'FS_PERMISSION_DENIED' || code === 'FS_ACCESS_DENIED' || code === 'workspace-file/forbidden' || code === 'workspace-file/outside-workspace'
+          ? '当前无权读取此来源文件，请检查访问权限。' : '原始来源文件当前不可读，请稍后重试。'
+      return { projectId: project.projectId, readable: false, isUserDecision: false, reason,
+        diagnostic: error instanceof Error ? error.message : String(error) }
     }
   }
   if (source.kind === 'communication-part') {
@@ -120,10 +125,17 @@ async function readMemorySource(access: ProjectsCoreAccess, project: MemoryProje
       ...(read.visibleComplete ? {} : { partial: true as const, reason: '保存通信来源的可见内容不完整。' }) }
   }
   const read = await access.readSource(project.projectId, source, signal, options)
+  const reason = read.code === 'deleted' ? '来源会话已删除。'
+    : read.code === 'not-found' ? '原始记录不存在或不在可读取范围。'
+    : read.code === 'stale-source' ? '来源内容已变化，请从原入口重新打开。'
+    : read.code === 'invalid-source' || read.code === 'ambiguous-source' ? '当前来源位置无法确认，请从原聊天重新打开。'
+    : '原始来源当前不可读，请稍后重试。'
   return { projectId: read.projectId, source: read.source, readable: read.readable, isUserDecision: read.isUserDecision,
     ...(read.producer === undefined ? {} : { producer: read.producer }),
     ...(read.nativeItems === undefined ? {} : { nativeItems: read.nativeItems }),
     ...(read.partial === undefined ? {} : { partial: read.partial }),
     ...(read.limitations === undefined ? {} : { limitations: read.limitations }),
-    ...(read.text === undefined ? {} : { text: read.text }), ...(read.reason === undefined ? {} : { reason: read.reason }) }
+    ...(read.text === undefined ? {} : { text: read.text }),
+    ...(read.readable && read.reason === undefined ? {} : { reason: read.readable ? '当前仅显示部分来源信息，请核对原始来源。' : reason }),
+    ...(read.reason === undefined ? {} : { diagnostic: read.reason }) }
 }

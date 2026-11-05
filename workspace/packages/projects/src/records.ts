@@ -207,7 +207,9 @@ export class ProjectStore {
   }
 
   /** 创建最小 v7 项目封套，不写入旧业务台账字段。 */
-  async createProject(input: CreateProjectInput): Promise<Project> {
+  async createProject(input: CreateProjectInput, options: {
+    readonly prepareDirectory?: (projectId: string, directory: string) => Promise<void>;
+  } = {}): Promise<Project> {
     return this.#mutate(async () => {
       await this.#ensureRootDirectory();
       const id = safeIdentifier(input.id ?? randomUUID(), "project id");
@@ -234,7 +236,7 @@ export class ProjectStore {
         sessions: [],
         deliveries: [],
       };
-      await this.#createProjectRecord(record);
+      await this.#createProjectRecord(record, options.prepareDirectory);
       this.#publishCommitted(record);
       return copyProject(project);
     });
@@ -1346,7 +1348,7 @@ export class ProjectStore {
   }
 
   /** Publish only a complete new directory; incomplete staging never enters the record catalog. */
-  async #createProjectRecord(record: PersistedProjectRecord): Promise<void> {
+  async #createProjectRecord(record: PersistedProjectRecord, prepareDirectory?: (projectId: string, directory: string) => Promise<void>): Promise<void> {
     const directory = this.#projectDirectory(record.project.id);
     try {
       await lstat(directory);
@@ -1361,6 +1363,8 @@ export class ProjectStore {
     try {
       identity = await lstat(staging, { bigint: true });
       await writeFileDurable(join(staging, RECORD_FILE_NAME), JSON.stringify(record.raw, undefined, 2) + "\n");
+      // 初始配置先进入未发布目录；失败时整个项目仍未对读者可见。
+      await prepareDirectory?.(record.project.id, staging);
       stage = "rename";
       await rename(staging, directory);
       published = true;

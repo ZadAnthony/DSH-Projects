@@ -38,7 +38,7 @@ export function ProjectMainModelControl({ acquireDirectory, generation , transla
   }, [acquireDirectory, currentGeneration]);
   if (currentGeneration === undefined) return <ErrorState inline title={copy("p5.model.disconnected")} />;
   if (opened?.generation !== currentGeneration) return <LoadingState label={copy("p5.model.loadingMainSettings")} rows={1} />;
-  if (opened.error !== undefined) return <ErrorState inline title={opened.error} />;
+  if (opened.error !== undefined) return <ErrorState inline title={copy('p5.model.mainSettingsUnreadable')} diagnostic={{ label: copy('p5.panel.errorDetails'), content: opened.error }} />;
   if (opened.directory === undefined) return null;
   return <ProjectModelDirectoryControl copy={copy} directory={opened.directory} generation={generation} />;
 }
@@ -110,8 +110,8 @@ function ProjectModelDirectoryControl({ directory, generation , copy}: { directo
     {state.status === 'loading' && <LoadingState label={copy("p5.model.loadingDirectory")} rows={1} />}
     {pending && <LoadingState label={copy("p5.model.savingSettings")} rows={1} />}
     {state.routable === false && <ErrorState inline title={copy("p5.model.savedModelUnavailable")} />}
-    {state.failures.map(failure => <ErrorState inline key={failure.id} title={failure.name} description={failure.message} />)}
-    {(actionError ?? state.error) !== null && <ErrorState inline title={actionError ?? state.error ?? ''} />}
+    {state.failures.map(failure => <ErrorState inline key={failure.id} title={failure.name} description={copy('p5.settings.execution.catalogUnavailable')} diagnostic={{ label: copy('p5.panel.errorDetails'), content: failure.message }} />)}
+    {(actionError ?? state.error) !== null && <ErrorState inline title={copy('p5.model.settingsOperationFailed')} diagnostic={{ label: copy('p5.panel.errorDetails'), content: actionError ?? state.error ?? '' }} />}
     {(actionError ?? state.error) !== null && <Button variant="outline" size="md" type="button" disabled={!connected || pending || state.status === 'loading'} onClick={load}>{copy("p5.model.retrySettings")}</Button>}
   </div>;
 }

@@ -116,6 +116,8 @@ export interface OverviewSourceView {
   readonly readAt: string
   readonly rows: readonly OverviewRow[]
   readonly message?: string
+  /** Internal exception detail for local diagnostics; never part of the board's user-facing explanation. */
+  readonly diagnostic?: string
   readonly limitations?: readonly string[]
 }
 

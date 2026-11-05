@@ -9,6 +9,7 @@ import { markdownLabels } from '../markdown-labels.ts'
 import { ReasoningRow } from './ReasoningRow.tsx'
 import { useSearchableHidden } from './searchable-hidden.ts'
 import css from './AssistantMarkdown.module.css'
+import { ProjectReplyLinkTextBoundary, type ProjectReplyLinkSource } from '../../../../../../client/ProjectReplySessionLinks.tsx'
 
 /**
  * Standalone fallback for image destinations (query/fragment suffixes are ignored).
@@ -34,6 +35,8 @@ export interface AssistantMarkdownProps {
   useDisclosure: UseDisclosure
   blocks: readonly AssistantBlock[]
   streaming: boolean
+  replyLinksSettled?: boolean | undefined
+  replySessionLinkSource?: ProjectReplyLinkSource | undefined
   /** Frozen partial of an aborted turn: rendered with a stopped marker. */
   interrupted?: boolean | undefined
   /** Render consecutive image blocks through the attachment slot. */
@@ -53,7 +56,7 @@ export interface AssistantMarkdownProps {
 /** Reasoning block as the Think variant summary row (figma 39:28304). */
 export const AssistantMarkdown = memo(function AssistantMarkdown({
   blocks, streaming, interrupted, renderMessageImages, groupPart, useDisclosure,
-  reasoningHidden = false, usePresentation, revealProcess, mentions, t,
+  reasoningHidden = false, usePresentation, revealProcess, mentions, t, replyLinksSettled = false, replySessionLinkSource,
 }: AssistantMarkdownProps) {
   // Stable per locale revision (t identity changes on switch): a fresh object
   // per render would rebuild MarkdownText's component table every chunk.
@@ -79,14 +82,15 @@ export const AssistantMarkdown = memo(function AssistantMarkdown({
     switch (block.kind) {
       case 'text':
         rendered.push(
-          <MarkdownText
-            key={i}
-            text={block.text}
-            streaming={streaming}
-            labels={labels}
-            fileMentions={mentions}
-            pathImages={pathImages}
-          />,
+          <ProjectReplyLinkTextBoundary key={i} text={block.text} enabledSettled={replyLinksSettled && !streaming && !interrupted} source={replySessionLinkSource}>
+            <MarkdownText
+              text={block.text}
+              streaming={streaming}
+              labels={labels}
+              fileMentions={mentions}
+              pathImages={pathImages}
+            />
+          </ProjectReplyLinkTextBoundary>,
         )
         break
       case 'reasoning':

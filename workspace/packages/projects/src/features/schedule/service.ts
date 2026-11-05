@@ -1,5 +1,7 @@
 import type { RootWriteScope } from '../../metadata-files.ts'
 import { randomUUID } from 'node:crypto'
+import { ScheduleInputError } from '@deepseek-ai/dsh-schedule'
+import { RemoteError } from '@deepseek-ai/dsh-typert-protocol'
 import type {
   ManualRunAdmissionResult, RunNowScheduleInput, ProjectSchedule, SaveScheduleInput, ScheduleAccess, ScheduleCorePort, ScheduleManager, ScheduleRequest,
   ScheduleRunLink, ScheduleRunView, ScheduleSession, ScheduleSnapshot, ScheduleWriteResult, SchedulePendingEffect, SchedulePendingConsumer, ScheduleWriteEffects,
@@ -8,6 +10,7 @@ import { ProjectScheduleStore } from './store.ts'
 import type { ScheduleClockBoundary } from './power-facts.ts'
 import { createScheduleAnchor, instant, nextScheduleTime, normalizeScheduleRule, validateScheduleText } from './timing.ts'
 import { runLinkSchema, runNowInputSchema, saveInputSchema, sourceSchema, type ScheduleState } from './validation.ts'
+import { SCHEDULE_INPUT_NAMESPACE, isScheduleInputCode, scheduleInputPath, type ScheduleInputField, type ScheduleInputIssue } from './input-errors.ts'
 
 export class ProjectScheduleService {
   constructor(private readonly core: ScheduleCorePort, private readonly clock: () => string = () => new Date().toISOString(),
@@ -55,10 +58,12 @@ export class ProjectScheduleService {
         if (existing.sessionId !== input.sessionId) throw new Error('计划保持所属原会话；本入口不迁移计划归属。')
       } else if (input.expectedRevision !== undefined) throw new Error('新计划不带旧修订号。')
       const now = mutationAt
-      validateScheduleText(input.title, input.prompt)
-      const rule = normalizeScheduleRule(input.rule)
+      validateInput('title', () => validateScheduleText(input.title, input.prompt))
+      const field = ruleInputField(input.rule)
+      const rule = validateInput(field, () => normalizeScheduleRule(input.rule))
       const sameRule = existing !== undefined && JSON.stringify(normalizeScheduleRule(existing.rule)) === JSON.stringify(rule)
-      const timing = sameRule ? { rule, anchorAt: existing.anchorAt } : createScheduleAnchor(rule, now, input.title, input.prompt)
+      const timing = sameRule ? { rule, anchorAt: existing.anchorAt }
+        : validateInput(field, () => createScheduleAnchor(rule, now, input.title, input.prompt))
       const schedule: ProjectSchedule = {
         id: existing?.id ?? randomUUID(), projectId: access.projectId, sessionId: input.sessionId,
         title: input.title, prompt: input.prompt, ...timing, enabled: input.enabled,
@@ -230,6 +235,28 @@ export class ProjectScheduleService {
   }
   private now(): string { const now = this.clock(); instant(now); return now }
   private store(access: ScheduleAccess): ProjectScheduleStore { return new ProjectScheduleStore(access.projectId, access.projectDirectory) }
+}
+
+/** 该调用只包住输入解析/锚点计算；保存和pending处理均不在此catch内。 */
+function validateInput<T>(field: ScheduleInputField, parse: () => T): T {
+  try { return parse() }
+  catch (error) {
+    if (!(error instanceof ScheduleInputError) || !isScheduleInputCode(error.code)) throw error
+    const issue: ScheduleInputIssue = { namespace: SCHEDULE_INPUT_NAMESPACE,
+      path: scheduleInputPath(error.code === 'invalid_time_zone' ? 'timeZone' : field), code: error.code }
+    throw new RemoteError('gateway/bad-request', error.message, { issues: [issue] })
+  }
+}
+
+function ruleInputField(rule: SaveScheduleInput['rule']): ScheduleInputField {
+  switch (rule.kind) {
+    case 'cron': return 'expression'
+    case 'at': return 'date'
+    case 'daily': return 'time'
+    case 'weekly': return 'weekdays'
+    case 'after': return 'afterSeconds'
+    case 'every': return 'everySeconds'
+  }
 }
 
 function describe(error: unknown): string { return typeof error === 'object' && error !== null && 'message' in error ? String(error.message) : String(error) }

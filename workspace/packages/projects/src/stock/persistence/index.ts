@@ -118,6 +118,7 @@ export class ProjectSessionPersistence extends SessionPersistence {
   private readonly writers = new Map<string, ProjectSessionHandle | null>()
   private readonly handles = new Set<ProjectSessionHandle>()
   private readonly opening = new Map<Promise<unknown>, ReadonlySet<SessionId>>()
+  private readonly writeAcquisitions = new Map<SessionId, Promise<void>>()
   private readonly revisionScope = randomUUID()
   private initialization?: Promise<void>
   private closing?: Promise<void>
@@ -284,15 +285,28 @@ export class ProjectSessionPersistence extends SessionPersistence {
       return route.confirmThrough(targetNext, options.signal)
     }
     if (options.session !== undefined) throw new Error('PROJECT_SOURCE_HAS_NO_EXACT_WRITER_ROUTE')
-    const active = this.writers.get(id)
-    if (active === null) throw new SessionAlreadyOwnedError(id)
-    if (active !== undefined) { await active.flush({ signal: options.signal }); return active.committedRange(targetNext) }
-    const directory = await this.ensureDirectory(id, undefined, options.signal)
-    const prior = this.confirmedCuts.get(id)
-    if (prior?.journalIdentity === directory.identity && prior.nextSeq >= targetNext) return this.rangeFor(directory, targetNext, prior.epoch, 'writer-fsync')
-    const opened = await this.open(id, 'write', options) as ProjectSessionHandle
-    try { await opened.flush({ signal: options.signal }); return opened.committedRange(targetNext) }
-    finally { await opened.close() }
+    // A cold read may need a short writer-fsync barrier. Share the acquisition
+    // boundary with run writers, and keep this temporary handle through close.
+    // A run writer holds the queue only until its handle is acquired, not for
+    // the Agent lifetime. Recheck after waiting: it may now own the exact route.
+    const selected = await this.trackOpening([id], () => this.withWriteAcquisition<{ route: ProjectWriterRoute } | { cut: CommittedRange }>(id, async () => {
+      this.assertOpen(); this.assertCarrierOpen(id); options.signal?.throwIfAborted()
+      const currentRoute = this.routes.get(id)
+      if (currentRoute !== undefined) return { route: currentRoute }
+      const active = this.writers.get(id)
+      if (active === null) throw new SessionAlreadyOwnedError(id)
+      if (active !== undefined) { await active.flush({ signal: options.signal }); return { cut: active.committedRange(targetNext) } }
+      const directory = await this.ensureDirectory(id, undefined, options.signal)
+      const prior = this.confirmedCuts.get(id)
+      if (prior?.journalIdentity === directory.identity && prior.nextSeq >= targetNext) return { cut: this.rangeFor(directory, targetNext, prior.epoch, 'writer-fsync') }
+      // Already inside the acquisition queue; public open() would wait on us.
+      const opened = await this.openOwned(id, 'write', options) as ProjectSessionHandle
+      try { await opened.flush({ signal: options.signal }); return { cut: opened.committedRange(targetNext) } }
+      finally { await opened.close() }
+    }))
+    // A closing route may re-enter confirmThrough after releasing its handle.
+    // Delegate only after this queue item settles, so that re-entry can acquire.
+    return 'route' in selected ? selected.route.confirmThrough(targetNext, options.signal) : selected.cut
   }
 
   async openForRun(id: SessionId, transform: ProjectRunTransform, options: SessionPersistenceOpenOptions = {}): Promise<{ handle: ProjectSessionHandle; events: readonly SessionEvent[]; eventState: 'detached'; canonicalCount: number }> {
@@ -399,7 +413,7 @@ export class ProjectSessionPersistence extends SessionPersistence {
   }
 
   create(header: SessionHeader, options?: SessionPersistenceCreateOptions): Promise<SessionHandle> {
-    return this.trackOpening([header.id], () => this.createOwned(header, options))
+    return this.trackOpening([header.id], () => this.withWriteAcquisition(header.id, () => this.createOwned(header, options)))
   }
 
   private async createOwned(header: SessionHeader, options?: SessionPersistenceCreateOptions): Promise<SessionHandle> {
@@ -443,7 +457,9 @@ export class ProjectSessionPersistence extends SessionPersistence {
   }
 
   open(id: SessionId, access: SessionAccess, options?: SessionPersistenceOpenOptions): Promise<SessionHandle> {
-    return this.trackOpening([id], () => this.openOwned(id, access, options))
+    return this.trackOpening([id], () => access === 'write'
+      ? this.withWriteAcquisition(id, () => this.openOwned(id, access, options))
+      : this.openOwned(id, access, options))
   }
 
   /** Projects-only seam: reuse the validated prefix decoded by this read open. */
@@ -783,6 +799,17 @@ export class ProjectSessionPersistence extends SessionPersistence {
     this.opening.set(promise, carriers)
     void promise.then(() => this.opening.delete(promise), () => this.opening.delete(promise))
     return promise
+  }
+
+  private withWriteAcquisition<T>(id: SessionId, operation: () => Promise<T>): Promise<T> {
+    const previous = this.writeAcquisitions.get(id) ?? Promise.resolve()
+    const result = previous.then(operation)
+    // A failed acquisition keeps its original rejection for its own caller;
+    // later work waits for settlement and may still acquire its own handle.
+    const settled = result.then(() => {}, () => {})
+    this.writeAcquisitions.set(id, settled)
+    void settled.then(() => { if (this.writeAcquisitions.get(id) === settled) this.writeAcquisitions.delete(id) })
+    return result
   }
 
   private claim(id: SessionId): void {

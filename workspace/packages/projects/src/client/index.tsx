@@ -209,6 +209,7 @@ function registerProjectsUi(ctx: Context): void {
     return result.value;
   };
   const communication: ProjectCommunicationInjected = {
+    beginNavigation: actions.beginNavigation,
     openTarget,
     openCommunicationFile: async path => { await unwrap(ctx.remote.session.openWorkspacePath({ path })); },
     readCommunication: (request, signal) => unwrap(remote.readCommunication(request, signal)),

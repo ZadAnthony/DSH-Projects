@@ -2,12 +2,15 @@ import { memo, useCallback, useMemo } from 'react'
 import type { InjectFace } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ChatNodeViewProps, PresentationInjected, TurnTailOwnerProps } from '../contract/slots.ts'
 import { AssistantMarkdown } from './AssistantMarkdown.tsx'
+import type { ProjectReplyLinkSource } from '../../../../../../client/ProjectReplySessionLinks.tsx'
 
-type AssistantNodeViewProps = ChatNodeViewProps<'assistant-step'> & InjectFace<PresentationInjected>
+type AssistantNodeViewProps = ChatNodeViewProps<'assistant-step'> & InjectFace<PresentationInjected> & {
+  readonly replySessionLinkSource?: ProjectReplyLinkSource | undefined
+}
 
 /** Streaming, settled, and interrupted Assistant states share one keyed renderer instance. */
 export const AssistantNodeView = memo(function AssistantNodeView({
-  node, groupPart, useDisclosure, useTurnData, turnProcess, openFile, loadImage, renderFactorySlot, fileMentions, usePresentation, t,
+  node, groupPart, useDisclosure, useTurnData, turnProcess, openFile, loadImage, renderFactorySlot, fileMentions, usePresentation, t, replySessionLinkSource,
 }: AssistantNodeViewProps) {
   const data = node.data
   const renderMessageImages = useCallback<import('../contract/slots.ts').RenderMessageImages>(
@@ -37,6 +40,8 @@ export const AssistantNodeView = memo(function AssistantNodeView({
       groupPart={groupPart}
       useDisclosure={useDisclosure}
       streaming={data.status === 'running'}
+      replyLinksSettled={data.status === 'settled' && data.finalNode?.messageId !== undefined}
+      replySessionLinkSource={replySessionLinkSource}
       interrupted={data.status === 'interrupted'}
       renderMessageImages={renderMessageImages}
       reasoningHidden={reasoningHidden}

@@ -79,6 +79,7 @@ export interface ProjectMemorySourceView {
   readonly producer?: string
   readonly text?: string
   readonly reason?: string
+  readonly diagnostic?: string
   readonly nativeItems?: readonly NativeProjectSourceItem[]
   readonly partial?: true
   readonly limitations?: readonly string[]
@@ -211,7 +212,7 @@ export interface ProjectDetail {
     | { readonly scope: 'session'; readonly sessionId: string }
   )[]
 }
-export interface CreateProjectRequest { readonly name: string; readonly workspace?: WorkspaceReference }
+export interface CreateProjectRequest { readonly name: string; readonly workspace?: WorkspaceReference; readonly instructions?: string }
 export interface CreateProjectResult { readonly detail: ProjectDetail; readonly warning?: string }
 export interface GetProjectRequest { readonly projectId: string }
 export interface CreateProjectSessionRequest { readonly projectId: string; readonly title?: string; readonly workspace?: WorkspaceReference | null }

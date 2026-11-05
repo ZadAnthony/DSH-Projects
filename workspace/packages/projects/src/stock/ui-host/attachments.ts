@@ -13,6 +13,8 @@ import {
 } from '@deepseek-ai/dsh-attachment-local'
 import { scopeChainOf, scopeOf } from '@deepseek-ai/dsh-scope'
 import type { SessionId } from '@deepseek-ai/dsh-session'
+import type {} from '@deepseek-ai/dsh-tools'
+import type {} from '@deepseek-ai/dsh-llm'
 import type {} from '../read/index.ts'
 
 /**
@@ -35,6 +37,25 @@ export class PrivateSessionAttachments extends AttachmentStore {
 
   constructor(private readonly ownerCtx: Context) {
     super(ownerCtx)
+    // Native preset tools close over their standing composition Context, not
+    // the calling Agent's Context. An execution started by another Agent can
+    // otherwise inherit that initiator's admission target for its whole turn.
+    ownerCtx.on('tools/execute', (exec, next) => exec.agent === undefined
+      ? next() : this.runFor(exec.agent.id, next))
+    ownerCtx.on('llm/stream', (options, next) => {
+      if (options.sessionId === undefined) return next()
+      const id = options.sessionId as SessionId, self = this
+      // Adapters are shared and lazy. Bind both creation and every iterator
+      // operation, so request-image preparation uses this request's carrier.
+      return { [Symbol.asyncIterator]() {
+        const iterator = self.runFor(id, () => next()[Symbol.asyncIterator]())
+        return {
+          next: (...args: Parameters<typeof iterator.next>) => self.runFor(id, () => iterator.next(...args)),
+          ...iterator.return === undefined ? {} : { return: (...args: Parameters<NonNullable<typeof iterator.return>>) => self.runFor(id, () => iterator.return!(...args)) },
+          ...iterator.throw === undefined ? {} : { throw: (...args: Parameters<NonNullable<typeof iterator.throw>>) => self.runFor(id, () => iterator.throw!(...args)) },
+        }
+      } }
+    })
   }
 
   runFor<T>(id: SessionId, action: () => T): T { return this.target.run(id, action) }

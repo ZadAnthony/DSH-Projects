@@ -5,6 +5,7 @@ import type {
 } from './contract.ts'
 import { Button, EmptyState, ErrorState, Input, LoadingState, Select, Tooltip } from '../../client/ui/index.ts'
 import { projectCopy, type ProjectsTranslate } from '../../client/ui/copy.ts'
+import { formatUiDate } from '../../client/ui/date-format.ts'
 
 export interface UsagePanelProps { readonly projectId: string; readonly actions: ProjectUsageActions; readonly translate?: ProjectsTranslate }
 
@@ -134,14 +135,14 @@ function usageQueryKey(query: ProjectUsageQuery): string {
 
 function UsageScope({ result , text}: { readonly result: ProjectUsageResult ; readonly text: ProjectsTranslate }): ReactNode {
   const hasReported = Object.values(result.tokens).some(metric => metric.reported !== null)
+  const session = result.query.sessionId === undefined ? text('p5.usage.projectSources')
+    : result.options.sessions.find(item => item.id === result.query.sessionId)?.title ?? result.query.sessionId
+  const model = result.query.model === undefined ? text('p5.usage.allModels') : result.query.model === 'unattributed'
+    ? text('p5.usage.modelBreakdownUnavailable') : `${result.query.model.provider} / ${result.query.model.model}`
   return <section className="dsh-usage-scope" aria-label={text("p5.usage.scopeAndReporting")} role="status">
       <div className="dsh-usage-scope-heading"><strong>{!hasReported ? text("p5.usage.unknown") : result.coverage.status === 'partial' ? text("p5.usage.partiallyAvailable") : text("p5.usage.reported")}</strong><span>{text("p3.overview.blockUpdated")}{' '}{time(result.refreshedAt, text)}</span></div>
-      <p className="dsh-usage-range">{text("p5.usage.scopePrefix")}{result.query.sessionId ? text("p5.usage.selectedSession") : text("p5.usage.projectSources")}{text("p5.common.semicolon")}{result.query.model ? text("p5.usage.selectedModel") : text("p5.usage.allModels")}{text("p5.common.semicolon")}{time(result.query.from, text)}{' '}{text("p5.usage.rangeTo")}{' '}{time(result.query.to, text)}{text("p5.usage.endExclusiveSuffix")}</p>
-      <details className="dsh-usage-details"><summary>{text("p5.usage.scopeAndReporting")}</summary>
-      <p className="dsh-usage-note">{text("p5.usage.readCountPrefix")}{' '}{result.coverage.readableSessions} / {result.coverage.boundSessions}{' '}{text("p5.usage.nativeSourcesReportedTurns")}{' '}{result.coverage.reportedTurns}{' '}{text("p5.usage.reportedTurnsMissingTurns")}{' '}{result.coverage.missingTurns}{' '}{text("p5.usage.missingTurnsMissingSources")}{' '}{result.coverage.missingSources}{' '}{text("p5.usage.unknownTurnCountSuffix")}</p>
-      <p className="dsh-usage-note">{text("p5.usage.auxiliaryAvailablePrefix")}{' '}{result.coverage.reportedAuxiliaryRequests}{' '}{text("p5.usage.auxiliaryMissingFragment")}{' '}{result.coverage.missingAuxiliaryRequests}{' '}{text("p5.usage.auxiliaryUnknownConsumptionSuffix")}</p>
-      <p className="dsh-usage-note">{text("p5.usage.observedTimePrefix")}{result.observedRange === null ? text("p5.usage.noAttributableEndTime") : text("p5.usage.timeRange", { value: time(result.observedRange.from, text), value1: time(result.observedRange.to, text) })}{text("p5.common.period")}</p>
-      </details>
+      {result.coverage.status !== 'reported' && <p className="dsh-usage-note">{text('p5.usage.incompleteReports')}</p>}
+      <p className="dsh-usage-range">{text('p5.usage.scopePrefix')}{session}{text('p5.common.semicolon')}{model}{text('p5.common.semicolon')}{time(result.query.from, text)}{' '}{text('p5.usage.rangeTo')}{' '}{time(result.query.to, text)}{text('p5.usage.endExclusiveSuffix')}</p>
   </section>
 }
 
@@ -156,7 +157,7 @@ function UsageSummary({ result, text }: { readonly result: ProjectUsageResult; r
     </div>)}</dl>
     {!hasReported && <p className="dsh-usage-note dsh-usage-empty">{text('p3.usage.empty')}</p>}
     <UsageBreakdown result={result} text={text} />
-    <p className="dsh-usage-cost"><strong>{text("p5.usage.costUnknown")}</strong>{result.cost.reason}</p>
+    <p className="dsh-usage-cost">{text('p5.usage.costNotProvided')}</p>
   </section>
 }
 
@@ -195,21 +196,7 @@ function UsageResult({ result, text }: { readonly result: ProjectUsageResult; re
     <GroupTable title={text("p5.usage.bySessionSource")} columnTitle={text("p5.usage.column.sessionSource")} rows={result.sessions} text={text} />
     <GroupTable title={text("p5.usage.byRequestSource")} columnTitle={text("p5.usage.column.requestSource")} rows={result.sources} text={text} />
     <GroupTable title={text("p5.usage.byModel")} columnTitle={text("p5.usage.model")} rows={result.models} text={text} />
-    <GroupTable title={text("p5.usage.byUtcDate")} columnTitle={text("p5.usage.column.utcDate")} rows={result.periods} text={text} />
-    <details className="dsh-usage-details" open={result.coverage.gaps.length > 0}>
-      <summary>{text("p5.usage.scopeAndMissingSources")}</summary>
-      <ul>{result.coverage.notes.map(note => <li key={note}>{note}</li>)}</ul>
-      {result.coverage.gaps.length > 0
-        ? <ul>{result.coverage.gaps.map((gap, index) => <li key={`${gap.code}:${index}`}>{gap.message}</li>)}</ul>
-        : <p>{text("p5.usage.availableRecordsCaveat")}</p>}
-      <p>{text("p5.usage.partialReportingExplanation")}</p>
-    </details>
-    {result.sessions.map(item => <details className="dsh-usage-details" key={item.key}>
-      <summary>{item.label}{text("p5.usage.sourceReferenceSuffix")}</summary>
-      <p>{text("p5.usage.sourcePrefix")}{item.source === 'live' ? text("p5.usage.currentSessionSnapshot") : item.source === 'prepared' ? text("p5.usage.historicalSessionSnapshot") : text("p5.usage.unreadable")}{text("p5.usage.readAtFragment")}{time(item.observedAt, text)}{text("p5.usage.latestEventFragment")}{item.lastEventAt === null ? text("p5.usage.unknownOrNoRecord") : time(item.lastEventAt, text)}{text("p5.usage.excludedCountPrefix")}{' '}{item.excludedInheritedEvents}{' '}{text("p5.usage.inheritedRecordsSuffix")}</p>
-      {item.child !== undefined && <p>{text("p5.usage.childNativeIdentityPrefix")}{item.child.hostSessionId}{text("p5.usage.directParentSourceFragment")}{item.child.parentHostSessionId}{text("p5.usage.rootCarrierFragment")}{item.child.rootHostSessionId}{text("p5.usage.createdAtFragment")}{time(item.child.sessionCreatedAt, text)}{text("p5.usage.childAttributionSuffix")}</p>}
-      {item.nativeReported !== null && <p>{text("p5.usage.nativeCumulativeUncachedPrefix")}{' '}{formatNumber(item.nativeReported.uncachedInputTokens)}{text("p5.usage.nativeCumulativeOutputFragment")}{' '}{formatNumber(item.nativeReported.outputTokens)}{text("p5.usage.nativeCumulativeCaveat")}</p>}
-    </details>)}
+    <GroupTable title={text("p5.usage.byUtcDate")} columnTitle={text("p5.usage.column.utcDate")} rows={result.periods} text={text} utcDates />
   </>
 }
 
@@ -248,12 +235,12 @@ function Metrics({ tokens , text}: { readonly tokens: UsageMetrics ; readonly te
   return <dl className="dsh-usage-metrics">{Object.entries(labels).map(([key, label]) =>
     <div key={key}><dt>{text(label)}</dt><dd>{formatUsageMetric(tokens[key as UsageMetricKey], text)}</dd></div>)}</dl>
 }
-function GroupTable({ title, columnTitle, rows, text }: { readonly title: string; readonly columnTitle: string; readonly rows: readonly UsageGroup[]; readonly text: ProjectsTranslate }): ReactNode {
+function GroupTable({ title, columnTitle, rows, text, utcDates = false }: { readonly title: string; readonly columnTitle: string; readonly rows: readonly UsageGroup[]; readonly text: ProjectsTranslate; readonly utcDates?: boolean }): ReactNode {
   return <details className="dsh-usage-details dsh-usage-group" aria-label={title}>
     <summary>{title}</summary>
     {rows.length === 0 ? <EmptyState title={text('p3.usage.empty')} /> : <div className="dsh-usage-table" role="region" aria-label={text("p5.usage.groupDetails", { value: title })} tabIndex={0}><table>
       <thead><tr><th scope="col">{columnTitle}</th>{Object.values(labels).map(label => <th key={label} scope="col">{text(label)}</th>)}</tr></thead>
-      <tbody>{rows.map(row => <tr key={row.key}><th scope="row">{row.label}</th>
+      <tbody>{rows.map(row => <tr key={row.key}><th scope="row"><span className="dsh-usage-row-label">{utcDates && /^\d{4}-\d{2}-\d{2}$/.test(row.label) ? formatUiDate(row.label, text, { dateOnly: true, timeZone: 'UTC' }) : row.label}{'source' in row && row.source === 'unavailable' && <small className="dsh-usage-row-status">{text('p5.usage.unreadable')}</small>}</span></th>
         {Object.keys(labels).map(key => <td key={key}>{formatUsageMetric(row.tokens[key as UsageMetricKey], text)}</td>)}</tr>)}</tbody>
     </table></div>}
   </details>
@@ -263,5 +250,5 @@ export function formatUsageMetric(metric: UsageMetric, text: ProjectsTranslate =
 }
 function formatNumber(value: number): string { return value.toLocaleString('zh-CN') }
 function time(value: number | undefined, text: ProjectsTranslate = projectCopy()): string {
-  return value === undefined ? text("p5.usage.unbounded") : new Date(value).toLocaleString('zh-CN', { hour12: false })
+  return value === undefined ? text("p5.usage.unbounded") : formatUiDate(value, text, { seconds: true })
 }

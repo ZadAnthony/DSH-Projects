@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { historyDisplaySummary } from './history-display-summary.ts';
 import { canonicalJsonChunks, codePointLength, sliceCodePoints } from './canonical-chunks.ts';
 import type { Context } from "@deepseek-ai/cordis";
 import type { SessionEvent } from "@deepseek-ai/dsh-session";
@@ -55,6 +56,8 @@ export type * from './project-history-types.ts'
 import type { ProjectHistoryStatus, ProjectHistorySpeaker, ProjectHistoryMembership, ProjectHistoryMembershipResolver, ProjectHistorySearchRequest, ProjectHistoryReadRequest, ProjectHistorySearchItem, ProjectHistoryUnavailableSource, ProjectHistorySearchResult, ProjectHistoryReadResult } from './project-history-types.ts'
 
 interface FixedQuery {
+  /** Server-side UI choice only; never accepted from a request or encoded in cursors. */
+  readonly displaySummary?: boolean;
   readonly sessionIds?: readonly string[] | undefined;
   readonly hostSessionIds?: readonly string[] | undefined;
   readonly producer?: string | undefined;
@@ -137,6 +140,7 @@ export class ProjectHistoryReader {
     request: ProjectHistorySearchRequest,
     signal?: AbortSignal,
     captureSamePage?: (read: (signal?: AbortSignal) => Promise<ProjectHistorySearchResult>) => void,
+    presentation: { readonly displaySummary?: boolean } = {},
   ): Promise<ProjectHistorySearchResult> {
     signal?.throwIfAborted();
     const cursor = request.cursor === undefined ? undefined : decodeCursor(request.cursor);
@@ -146,10 +150,11 @@ export class ProjectHistoryReader {
     if (cursor !== undefined && cursor.projectId !== projectId) {
       return unavailableSearch("history cursor belongs to a different project");
     }
-    const normalized = cursor === undefined
+    const normalizedQuery = cursor === undefined
       ? normalizeInitialQuery(request)
       : queryFromCursorRequest(request, cursor.query);
-    if (typeof normalized === "string") return unavailableSearch(normalized);
+    if (typeof normalizedQuery === "string") return unavailableSearch(normalizedQuery);
+    const normalized: FixedQuery = { ...normalizedQuery, displaySummary: presentation.displaySummary === true };
 
     const membership = await this.memberships(projectId, signal);
     if (membership === undefined) return unavailableSearch("project membership is unavailable");
@@ -931,7 +936,8 @@ function freezeSourceRead(value: ReturnType<typeof emptySourceRead>): SourceRead
 }
 
 function encodeCursor(cursor: HistoryCursor): string {
-  return encodeURIComponent(JSON.stringify(cursor));
+  const { displaySummary: _presentation, ...query } = cursor.query;
+  return encodeURIComponent(JSON.stringify({ ...cursor, query }));
 }
 
 function decodeCursor(value: string): HistoryCursor | undefined {
@@ -1021,7 +1027,9 @@ function searchExcerpt(item: ProjectHistorySearchItem, query: FixedQuery): Proje
   const match = offset < 0 ? undefined : originalMatchRange(item.text, offset, offset + keyword!.length);
   const total = codePointLength(item.text), start = Math.max(0, (match?.start ?? 0) - 64), end = Math.min(total, start + PROJECT_HISTORY_EXCERPT_MAX);
   const { visibleBlocks: _blocks, ...rest } = item;
+  const displaySummary = query.displaySummary === true ? historyDisplaySummary(item.text, match?.start ?? 0, PROJECT_HISTORY_EXCERPT_MAX, query.keyword, item.partial === true) : undefined;
   return { ...rest, text: sliceCodePoints(item.text, start, end), excerpt: {unit:'unicode-code-points',start,end,total},
+    ...(displaySummary === undefined ? {} : { displaySummary }),
     ...(match === undefined ? {} : {match:{method:'literal-case-insensitive',field:'text',...match}}) };
 }
 

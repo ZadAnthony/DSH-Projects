@@ -398,6 +398,14 @@ button.crumb:hover {
   --dsh-composer-dock-inset: 8px;
 }
 
+/* A blank project main uses the native hero width and spacing. Active project
+   conversations keep their existing embedded transcript/composer geometry. */
+.embeddedBody[data-project-main-hero] {
+  --dsh-chat-content-width: clamp(680px, calc(var(--dsh-conversation-column-width, 0px) * 0.64), 920px);
+  --dsh-composer-card-max-width: calc(var(--dsh-chat-content-width) + 32px);
+  --dsh-composer-side-clearance: 16px;
+}
+
 .scrollBody {
   display: flex;
   flex: 1;

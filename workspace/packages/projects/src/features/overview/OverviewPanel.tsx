@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { RefreshButton } from '../../client/WorkflowControls.tsx'
+import { formatUiDate } from '../../client/ui/date-format.ts'
 import { Button, EmptyState, ErrorState, IconInfoOutlineRegular, LoadingState, projectCopy, Tooltip, type ProjectsTranslate } from '../../client/ui/index.ts'
 import type {
   OverviewClientActions, OverviewContent, OverviewNavigation, OverviewRow, OverviewSourceView, OverviewView,
@@ -38,9 +39,9 @@ export function OverviewPanel({ projectId, actions, onNavigate, translate }: Ove
   return <section className="dsh-overview-panel" aria-label={copy('p3.overview.title')} aria-busy={loading}>
     <header className="dsh-overview-heading"><h2>{copy('p3.overview.title')}</h2><RefreshButton translate={copy} ariaLabel={copy('p3.overview.refresh')} loading={loading} onClick={() => { void read() }} /></header>
     {loading && currentView === undefined && <LoadingState label={copy('p3.overview.loading')} rows={3} />}
-    {loading && currentView !== undefined && <p className="dsh-overview-note" role="status">{copy('p3.overview.refreshingPrevious', { time: currentView.loadedAt })}</p>}
-    {error !== undefined && error.projectId === projectId && <ErrorState title={copy('p3.overview.readFailed')} description={error.message} retry={() => { void read() }} retryLabel={copy('p3.overview.refresh')} />}
-    {error !== undefined && error.projectId === projectId && currentView !== undefined && <p className="dsh-overview-note" role="status">{copy('p3.overview.refreshFailedPrevious', { time: currentView.loadedAt })}</p>}
+    {loading && currentView !== undefined && <p className="dsh-overview-note" role="status">{copy('p3.overview.refreshingPrevious', { time: formatUiDate(currentView.loadedAt, copy) })}</p>}
+    {error !== undefined && error.projectId === projectId && <ErrorState title={copy('p3.overview.readFailed')} description={copy('p3.overview.readRecovery')} diagnostic={{ label: copy('p3.overview.readFailed'), content: error.message }} retry={() => { void read() }} retryLabel={copy('p3.overview.refresh')} />}
+    {error !== undefined && error.projectId === projectId && currentView !== undefined && <p className="dsh-overview-note" role="status">{copy('p3.overview.refreshFailedPrevious', { time: formatUiDate(currentView.loadedAt, copy) })}</p>}
     {currentView !== undefined && <OverviewBoard view={currentView} onNavigate={onNavigate} translate={translate} />}
   </section>
 }
@@ -49,19 +50,23 @@ export function OverviewPanel({ projectId, actions, onNavigate, translate }: Ove
 export function OverviewBoard({ view, onNavigate, translate }: { readonly view: OverviewView; readonly onNavigate?: OverviewPanelProps['onNavigate']; readonly translate?: ProjectsTranslate }): ReactNode {
   const copy = projectCopy(translate)
   const anchor = (id: string) => `overview-${view.projectId}-${id}`
+  const runtimeDiagnostic = view.runtime.status !== 'available'
+    ? { level: 'error' as const, label: copy('p3.overview.runtimeUnavailable'), content: `${view.projectId}：${view.runtime.status}：${view.runtime.message}` }
+    : { level: 'info' as const, label: copy('p3.overview.runtimeUnknown'), content: view.runtime.value.filter(item => item.state === 'unknown')
+      .map(item => `${view.projectId}/${item.sessionId}：${item.reason ?? copy('p3.overview.runtimeUnknownReason')}`).join('\n') }
+  // Runtime facts stay in the owner response; unchanged diagnostics do not repeat on refresh.
+  useEffect(() => {
+    if (runtimeDiagnostic.content !== '') console[runtimeDiagnostic.level]('[dsh-projects]', runtimeDiagnostic.label, runtimeDiagnostic.content)
+  }, [runtimeDiagnostic.level, runtimeDiagnostic.label, runtimeDiagnostic.content])
   return <div className={`dsh-overview-board ${css.board}`}>
-    <div className="dsh-overview-meta"><span>{copy('p3.overview.readOnly')}</span>{view.document.updatedAt !== undefined && <span>{copy('p3.overview.updated')} <Timestamp value={view.document.updatedAt} /></span>}
-      <Tooltip label={copy('p3.overview.readHelp', { time: view.loadedAt })}><Button variant="ghost" size="sm" type="button" aria-label={copy('p3.overview.readHelpLabel')} icon={<IconInfoOutlineRegular size={16} />} /></Tooltip>
+    <div className="dsh-overview-meta"><span>{copy('p3.overview.readOnly')}</span>{view.document.updatedAt !== undefined && <span>{copy('p3.overview.updated')} <Timestamp copy={copy} value={view.document.updatedAt} /></span>}
+      <Tooltip label={copy('p3.overview.readHelp', { time: formatUiDate(view.loadedAt, copy) })}><Button variant="ghost" size="sm" type="button" aria-label={copy('p3.overview.readHelpLabel')} icon={<IconInfoOutlineRegular size={16} />} /></Tooltip>
     </div>
-    {view.project.status !== 'available' && <ErrorState title={copy('p3.overview.projectUnavailable')} description={view.project.message} inline><small>{copy('p3.overview.sourceReadAt')} <Timestamp value={view.project.readAt} /></small></ErrorState>}
-    {view.runtime.status !== 'available' && <ErrorState title={copy('p3.overview.runtimeUnavailable')} description={view.runtime.message} inline><small>{copy('p3.overview.sourceReadAt')} <Timestamp value={view.runtime.readAt} /></small></ErrorState>}
-    {view.runtime.status === 'available' && view.runtime.value.some(item => item.state === 'unknown') && <ErrorState inline title={copy('p3.overview.runtimeUnknown')}>
-      {view.runtime.value.filter(item => item.state === 'unknown').map(item => <p key={item.sessionId}>{view.project.status === 'available' ? view.project.value.sessions.find(session => session.id === item.sessionId)?.title ?? item.sessionId : item.sessionId}：{item.reason ?? copy('p3.overview.runtimeUnknownReason')}</p>)}
-    </ErrorState>}
-    {view.blocks.length === 0 ? <EmptyState icon={<IconInfoOutlineRegular size={32} />} title={copy('p3.overview.empty')} description={copy('p3.overview.emptyHelp')}><small className="dsh-overview-note">{copy('p3.overview.emptyNoStart')}</small></EmptyState> : <>
+    {view.project.status !== 'available' && <ErrorState title={copy('p3.overview.projectUnavailable')} description={copy('p3.overview.factsRecovery')} diagnostic={{ label: copy('p3.overview.projectUnavailable'), content: view.project.message }} inline><small>{copy('p3.overview.sourceReadAt')} <Timestamp copy={copy} value={view.project.readAt} /></small></ErrorState>}
+    {view.blocks.length === 0 ? <EmptyState icon={<IconInfoOutlineRegular size={32} />} title={copy('p3.overview.empty')} description={copy('p3.overview.emptyHelp')} /> : <>
       {view.blocks.length > 1 && <nav className={css.contents} aria-label={copy('p3.overview.contents')}>
         <span className="dsh-overview-note">{copy('p3.overview.contents')}</span>
-        <div>{view.blocks.map(({ block }) => <Button variant="ghost" size="sm" type="button" key={block.id} onClick={event => {
+        <div>{view.blocks.map(({ block }) => <Button variant="outline" size="sm" type="button" key={block.id} onClick={event => {
           const heading = event.currentTarget.closest('.dsh-overview-board')?.querySelector<HTMLElement>(`[id="${anchor(block.id)}"]`)
           heading?.scrollIntoView({ block: 'start', behavior: 'auto' }); heading?.focus({ preventScroll: true })
         }}>{block.title}</Button>)}</div>
@@ -84,7 +89,7 @@ function Block({ entry: { block, sources }, headingId, onNavigate, copy }: { rea
       <summary>{copy('p3.overview.fullContentSources')}{sources.length > 0 && <span className={css.count}>{copy('p3.overview.sourceCount', { count: sources.length })}</span>}</summary>
       <div className={css.expanded}>
         {hasSummary && <div><h4>{copy('p3.overview.bodyHeading')}</h4><Content content={block.content} /></div>}
-        {block.updatedAt !== undefined && <p className="dsh-overview-note">{copy('p3.overview.blockUpdated')} <Timestamp value={block.updatedAt} /></p>}
+        {block.updatedAt !== undefined && <p className="dsh-overview-note">{copy('p3.overview.blockUpdated')} <Timestamp copy={copy} value={block.updatedAt} /></p>}
         {sources.length > 0 && <div className={css.sources}><h4>{copy('p3.overview.sourcesHeading')}</h4>{sources.map((source, index) => <Source key={index} value={source} format={block.content.type} onNavigate={onNavigate} copy={copy} />)}</div>}
       </div>
     </details>
@@ -107,7 +112,7 @@ function SourceNotices({ sources, copy }: { readonly sources: readonly OverviewS
   const notices = sources.filter(value => value.status !== 'available' || value.rows.length === 0 || (value.limitations?.length ?? 0) > 0 || value.rows.some(row => (row.limitations?.length ?? 0) > 0))
   if (notices.length === 0) return null
   return <aside className={`dsh-overview-source-notices ${css.notices}`} aria-label={copy('p3.overview.sourceIssues')}>{notices.map((value, index) => <div key={index}>
-    {value.status !== 'available' && <ErrorState title={copy(`p3.overview.sourceStatus.${value.status}`)} description={value.message || copy('p3.overview.sourceNotRead')} inline />}
+    {value.status !== 'available' && <ErrorState title={copy(`p3.overview.sourceStatus.${value.status}`)} description={value.message || copy('p3.overview.sourceNotRead')} diagnostic={value.diagnostic === undefined ? undefined : { label: copy('p3.overview.sourceNotRead'), content: value.diagnostic }} inline />}
     {value.status === 'available' && value.rows.length === 0 && <p className="dsh-overview-note">{value.label}：{copy('p3.overview.noSourceRows')}</p>}
     {[...new Set([...(value.limitations ?? []), ...value.rows.flatMap(row => row.limitations ?? [])])].map((limitation, i) => <p key={i} className="dsh-overview-note">{value.label}：{limitation}</p>)}
   </div>)}</aside>
@@ -118,7 +123,7 @@ function Source({ value, format, onNavigate, copy }: { readonly value: OverviewS
     <p className="dsh-overview-note">{copy('p3.overview.sourceLabel', { label: value.label })}</p>
     {value.status === 'available' && value.rows.length === 0 && <p className="dsh-overview-note">{copy('p3.overview.noSourceRows')}</p>}
     {value.status === 'available' && <Rows rows={value.rows} format={format} onNavigate={onNavigate} copy={copy} />}
-    <p className="dsh-overview-note">{copy('p3.overview.sourceReadAt')} <Timestamp value={value.readAt} /></p>
+    <p className="dsh-overview-note">{copy('p3.overview.sourceReadAt')} <Timestamp copy={copy} value={value.readAt} /></p>
   </div>
 }
 
@@ -136,7 +141,7 @@ function Rows({ rows, format, onNavigate, copy }: { readonly rows: readonly Over
 
 function RowReading({ row, copy }: { readonly row: OverviewRow; readonly copy: ProjectsTranslate }): ReactNode {
   return <>
-    {row.ownerUpdatedAt !== undefined && <p className="dsh-overview-note">{copy('p3.overview.originalTime')} <Timestamp value={row.ownerUpdatedAt} /></p>}
+    {row.ownerUpdatedAt !== undefined && <p className="dsh-overview-note">{copy('p3.overview.originalTime')} <Timestamp copy={copy} value={row.ownerUpdatedAt} /></p>}
     {(row.limitations ?? []).map((limitation, index) => <p className="dsh-overview-note" key={index}>{limitation}</p>)}
   </>
 }
@@ -144,11 +149,10 @@ function RowReading({ row, copy }: { readonly row: OverviewRow; readonly copy: P
 function RowLinks({ row, onNavigate, copy }: { readonly row: OverviewRow; readonly onNavigate?: OverviewPanelProps['onNavigate']; readonly copy: ProjectsTranslate }): ReactNode {
   return <div className="dsh-overview-links">{row.links.map((link, index) => onNavigate === undefined
     ? <span key={index}>{copy('p3.overview.navigationUnavailable', { label: link.label })}</span>
-    : <Button variant="ghost" size="sm" type="button" key={index} onClick={() => onNavigate(link.target)}>{link.label}</Button>)}</div>
+    : <Button variant="outline" size="sm" type="button" key={index} onClick={() => onNavigate(link.target)}>{link.label}</Button>)}</div>
 }
 
-function Timestamp({ value }: { readonly value: string }): ReactNode {
-  const date = new Date(value)
-  return <Tooltip label={value}><time dateTime={value}>{Number.isNaN(date.getTime()) ? value : date.toLocaleString(undefined, { hour12: false })}</time></Tooltip>
+function Timestamp({ value, copy }: { readonly value: string; readonly copy: ProjectsTranslate }): ReactNode {
+  return <Tooltip label={value}><time dateTime={value} title={value}>{formatUiDate(value, copy)}</time></Tooltip>
 }
 function hasContent(content: OverviewContent): boolean { return content.type === 'text' ? content.text !== '' : content.type === 'list' ? content.items.length > 0 : content.columns.length > 0 || content.rows.length > 0 }

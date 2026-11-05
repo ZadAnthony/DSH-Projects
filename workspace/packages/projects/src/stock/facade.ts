@@ -37,12 +37,15 @@ import { createProjectRecordingPort } from './recording/index.ts'
 import { ProjectOwnedControl } from './control/index.ts'
 import { createOwnedProjectTitles } from './control/titles.ts'
 import { createOwnedStockCapabilities, type StockCapabilityOwnership } from './control/capabilities.ts'
+import { ProjectsSubagentTool } from './main-delegation.ts'
 import type { ProjectsLlmRuntime } from './host-ports.ts'
 import type { ProjectsPresetPublication } from './presets/revisions.ts'
 import { prepareProjectHarness } from './request/harness.ts'
 import { ProjectsCompactionEngine } from './request/compaction.ts'
 import { installMemoryCompaction } from './request/memory-compaction.ts'
 import type { ProjectInstructions, SessionInstructions, SettingsWriteResult } from '../features/settings/types.ts'
+import { ProjectSettingsStore } from '../features/settings/store.ts'
+import { durableMutationDetails } from '../metadata-errors.ts'
 import { createProjectsRuntimeGraph, type ProjectsRuntimeGraph, type ProjectsGraphCloseResult } from './graph.ts'
 import type { ProjectsHostPorts } from './host-ports.ts'
 import {
@@ -88,10 +91,16 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
     'projects/read-only-carrier': { readonly carrierId: string }
     'projects/archived': { readonly projectId: string; readonly sessionId?: string }
     'projects/source-unavailable': { readonly carrierId: string }
+    'projects/invalid-workspace': {
+      readonly path: string
+      readonly reason: 'absolute-required' | 'not-found' | 'not-directory' | 'unreadable'
+      readonly systemCode?: string
+    }
     'projects/create-partial': {
       readonly projectId: string; readonly sessionId?: string; readonly carrierId?: string
       readonly phase: ProjectsCreationPhase; readonly journal: 'materialized' | 'absent' | 'unknown'
     }
+    'projects/create-rejected': { readonly effect: 'none'; readonly phase: 'project-instructions' }
   }
 }
 
@@ -156,6 +165,7 @@ export class ProjectsFacade {
       const moduleOverrides = new Map<string, Plugin>([
         ['@deepseek-ai/dsh-jobs-local', capabilities.Jobs],
         ['@deepseek-ai/dsh-subagent', capabilities.Subagents],
+        ['@deepseek-ai/dsh-tool-subagent', ProjectsSubagentTool],
         ['@deepseek-ai/dsh-workflow-ptc', capabilities.Workflow],
         ['@deepseek-ai/dsh-compaction-basic', ProjectsCompactionEngine],
         ['@deepseek-ai/dsh-session-title', createOwnedProjectTitles(ownership)],
@@ -315,7 +325,25 @@ export class ProjectsFacade {
   private async createOwned(request: CreateProjectRequest, signal?: AbortSignal): Promise<CreateProjectResult> {
     return (async () => {
       const workspace = request.workspace === undefined ? undefined : { path: await this.workspace(request.workspace.path) }
-      const project = await this.store.createProject({ name: request.name, ...(workspace === undefined ? {} : { workspace }) })
+      if (request.instructions !== undefined && typeof request.instructions !== 'string') throw new Error('项目说明与要求必须是文字。')
+      const instructions = request.instructions?.trim() ? request.instructions : undefined
+      let instructionsFailed = false
+      let project: Project
+      try {
+        project = await this.store.createProject({ name: request.name, ...(workspace === undefined ? {} : { workspace }) },
+          instructions === undefined ? {} : { prepareDirectory: async (projectId, directory) => {
+            try {
+              const saved = await new ProjectSettingsStore(projectId, directory).saveProjectInstructions(instructions, 0, signal)
+              if (saved.kind !== 'saved') throw new Error('初始项目指令保存冲突。')
+            } catch (error) { instructionsFailed = true; throw error }
+          } })
+      } catch (error) {
+        if (instructionsFailed && durableMutationDetails(error)?.effect === 'none') {
+          throw new RemoteError('projects/create-rejected', '项目未创建：项目说明与要求保存失败。' + errorText(error),
+            { effect: 'none', phase: 'project-instructions' }, { cause: error })
+        }
+        throw error
+      }
       try {
         await this.createCarrier(project, 'main', `${project.name} 主会话`, undefined, signal)
         return { detail: projectDetail(await this.store.getSnapshot(project.id)) }
@@ -708,9 +736,19 @@ export class ProjectsFacade {
   private projectFilesRoot(id: string): string { return join(this.projectDirectory(id), 'artifacts') }
   private async ensureProjectFilesRoot(id: string): Promise<string> { const path = this.projectFilesRoot(id); await mkdir(path, { recursive: true }); return realpath(path) }
   private async workspace(path: string): Promise<string> {
-    if (!isAbsolute(path)) throw new Error('Project workspace must be an absolute directory')
-    const canonical = await realpath(path)
-    if (!(await stat(canonical)).isDirectory()) throw new Error('Project workspace must be a directory')
+    if (!isAbsolute(path)) throw new RemoteError('projects/invalid-workspace', 'Project workspace must be an absolute directory', { path, reason: 'absolute-required' })
+    let canonical: string
+    let directory: boolean
+    try {
+      canonical = await realpath(path)
+      directory = (await stat(canonical)).isDirectory()
+    } catch (error) {
+      const systemCode = error !== null && typeof error === 'object' && 'code' in error && typeof error.code === 'string' ? error.code : undefined
+      const reason = systemCode === 'ENOENT' ? 'not-found' : systemCode === 'ENOTDIR' ? 'not-directory' : 'unreadable'
+      throw new RemoteError('projects/invalid-workspace', error instanceof Error ? error.message : String(error),
+        { path, reason, ...(systemCode === undefined ? {} : { systemCode }) }, { cause: error })
+    }
+    if (!directory) throw new RemoteError('projects/invalid-workspace', 'Project workspace must be a directory', { path, reason: 'not-directory' })
     return canonical
   }
   private assertReady(): void {

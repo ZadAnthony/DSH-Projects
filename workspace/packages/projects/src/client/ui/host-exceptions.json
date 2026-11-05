@@ -65,6 +65,14 @@
   },
   {
     "file": "client/ui/tokens.css.ts",
+    "selector": "[data-platform='darwin'] .dsh-projects__list-column:not(.dsh-projects__deletion-page) > .dsh-projects__page-head",
+    "property": "padding-top",
+    "value": "calc(28px + var(--dsh-frame-top-clearance, 0px))",
+    "reason": "Only the first-level Projects entry page follows the native macOS plugin/task entry top inset; the reused deletion-result header and conversation/settings headers retain their own geometry.",
+    "hostSource": "DSH 0.2.1-rc.5 .dev/native-conversation-nav-20261103/sdk/packages/client/ui-plugin-manager/src/client/PluginManagerPage.module.css:39-40 and ui-schedule/src/client/TaskManagerPage.module.css:63-64; ui-layout/src/client/AppFrame.module.css:88-105 (48px root top clearance; native fullscreen only changes overlay/chrome values)"
+  },
+  {
+    "file": "client/ui/tokens.css.ts",
     "selector": ".dsh-projects__projects",
     "property": "gap",
     "value": "2px",

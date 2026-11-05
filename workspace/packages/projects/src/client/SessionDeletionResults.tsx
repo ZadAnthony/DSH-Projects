@@ -38,8 +38,8 @@ export function SessionDeletionResults({ results, t, busy = false, onContinue }:
           <summary><span>{t("sessions.deletion.stage.image-attachments")}</span><strong>{lifecycle.imageDeletion.complete
             ? t("sessions.deletion.progress.image-completed") : t("sessions.deletion.unconfirmed")}</strong></summary>
           <ul>{lifecycle.imageDeletion.results.map(item => <li key={`${item.kind}:${item.ref.attachmentId}:${item.kind === "image-object" ? "" : item.variantId}`}>
-            {item.ref.name === undefined ? "" : `${item.ref.name} · `}{t(`sessions.deletion.image-kind.${item.kind}`)}{t("p5.common.colon")}{t(`sessions.deletion.image-outcome.${item.outcome}`)}
-            {item.message === undefined ? null : t("p5.common.punctuationTemplate1", { value: item.message })}
+            {item.ref.name === undefined ? "" : `${item.ref.name} · `}{t(`sessions.deletion.image-kind.${item.kind}`)}{t("p5.common.colon")}
+            {item.message === undefined ? t(`sessions.deletion.image-outcome.${item.outcome}`) : <ErrorState inline title={t(`sessions.deletion.image-outcome.${item.outcome}`)} diagnostic={{ label: t('p5.panel.errorDetails'), content: item.message }} />}
           </li>)}</ul>
         </details>}
         {lifecycle.ownedDeletion !== undefined && lifecycle.ownedDeletion.members.length > 0 && <details className="dsp-deletion-details" open>
@@ -52,12 +52,12 @@ export function SessionDeletionResults({ results, t, busy = false, onContinue }:
             </li>)}</ul>
             <p className="dsp-deletion-attachment-status"><span>{t("sessions.deletion.stage.native-schedules")}</span><strong>{member.progress.nativeSchedules === undefined
               ? t("sessions.deletion.unconfirmed") : t(`sessions.deletion.progress.${member.progress.nativeSchedules}`)}</strong></p>
-            {member.failure !== undefined && <ErrorState className="dsp-deletion-error" title={t("p5.common.punctuationTemplate2", { value: t(`sessions.deletion.stage.${member.failure.stage}`), value1: member.failure.message })} inline>
+            {member.failure !== undefined && <ErrorState className="dsp-deletion-error" title={t(`sessions.deletion.stage.${member.failure.stage}`)} diagnostic={{ label: t('p5.panel.errorDetails'), content: member.failure.message }} inline>
               <p>{t(`sessions.deletion.certainty.${member.failure.certainty}`)}</p>
             </ErrorState>}
           </div>)}
         </details>}
-        {lifecycle.kind === "partial" && <ErrorState className="dsp-deletion-error" title={t("p5.common.punctuationTemplate2", { value: t(`sessions.deletion.stage.${lifecycle.failure.stage}`), value1: lifecycle.failure.message })} inline>
+        {lifecycle.kind === "partial" && <ErrorState className="dsp-deletion-error" title={t(`sessions.deletion.stage.${lifecycle.failure.stage}`)} diagnostic={{ label: t('p5.panel.errorDetails'), content: lifecycle.failure.message }} inline>
           <p>{t(`sessions.deletion.certainty.${lifecycle.failure.certainty}`)}</p>
           {lifecycle.failure.knownRemovedArtifacts !== undefined && <p>{t("sessions.deletion.knownRemoved", { value: String(lifecycle.failure.knownRemovedArtifacts) })}</p>}
           {lifecycle.failure.knownRemainingArtifacts !== undefined && <p>{t("sessions.deletion.knownRemaining", { value: String(lifecycle.failure.knownRemainingArtifacts) })}</p>}
@@ -107,7 +107,7 @@ export function ProjectDeletionResult({ project, results, t, busy, onContinue }:
     <p className="dsp-deletion-note">{t("project.deletion.readonly")}</p>
     {lifecycle?.kind !== "deleted" && <p className="dsp-deletion-attachment-status"><span>{t("project.deletion.files")}</span><strong>{current?.progress.projectFiles === undefined
       ? t("sessions.deletion.unconfirmed") : t(`sessions.deletion.progress.${current.progress.projectFiles}`)}</strong></p>}
-    {current?.failure !== undefined && <ErrorState className="dsp-deletion-error" title={current.failure.message} inline>
+    {current?.failure !== undefined && <ErrorState className="dsp-deletion-error" title={t(`sessions.deletion.stage.${current.failure.stage}`)} diagnostic={{ label: t('p5.panel.errorDetails'), content: current.failure.message }} inline>
       <p>{t(`sessions.deletion.certainty.${current.failure.certainty}`)}</p>
     </ErrorState>}
     <SessionDeletionResults results={results} t={t} />

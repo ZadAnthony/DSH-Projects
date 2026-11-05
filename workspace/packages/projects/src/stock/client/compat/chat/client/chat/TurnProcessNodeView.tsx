@@ -1,6 +1,6 @@
 import { memo } from 'react'
 import { IconChevronDownOutlineRegular } from '@deepseek-ai/dsh-client-ui-primitives'
-import type { ChatNodeViewProps } from '../contract/slots.ts'
+import type { ChatNodeViewProps, ChatViewSlotProps } from '../contract/slots.ts'
 import { turnProcessAlwaysOpen } from '../contract/turn-process.ts'
 import { formatRunDuration } from './message-chrome.ts'
 import a11yCss from './accessibility.module.css'
@@ -8,8 +8,8 @@ import css from './TurnProcessNodeView.module.css'
 
 /** Settled Turn duration and process disclosure above its content. */
 export const TurnProcessNodeView = memo(function TurnProcessNodeView({
-  node, turnProcess, t,
-}: ChatNodeViewProps<'turn-process'>) {
+  node, turnProcess, t, projectStatusText,
+}: ChatNodeViewProps<'turn-process'> & Pick<ChatViewSlotProps, 'projectStatusText'>) {
   if (turnProcess === undefined) throw new Error('turn-process node requires Turn process owner state')
   const open = !turnProcess.foldable || turnProcess.open
   const turn = node.location.kind === 'turn' || node.location.kind === 'step'
@@ -24,11 +24,11 @@ export const TurnProcessNodeView = memo(function TurnProcessNodeView({
     : formatRunDuration(elapsedMs, t)
   // Other end reasons retain elapsed time; only cancellation and failure replace it.
   const label = reason === 'aborted' ? t('message.stopped')
-    : reason === 'error' ? t('message.turnProcess.failed')
+    : reason === 'error' ? projectStatusText('failure.failedTurn', { turn: node.data.turn })
       : duration === undefined ? t('message.turnProcess.worked')
         : t('message.turnProcess.took')
   const announcement = reason === 'aborted' ? t('message.stopped')
-    : reason === 'error' ? t('message.turnProcess.failed')
+    : reason === 'error' ? projectStatusText('failure.failedTurn', { turn: node.data.turn })
       : t('message.turnProcess.worked')
   return (
     <>

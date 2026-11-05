@@ -24,7 +24,7 @@ import type { ProjectNativeHostNotificationSource } from '../native-host-notific
 export interface ProjectClientRemotePort {
   list(): Promise<RemoteResult<readonly ProjectSummary[]>>
   create(input: CreateProjectRequest): Promise<RemoteResult<CreateProjectResult>>
-  get(input: GetProjectRequest): Promise<RemoteResult<ProjectDetail>>
+  get(input: GetProjectRequest, signal?: AbortSignal): Promise<RemoteResult<ProjectDetail>>
   uiControl(signal?: AbortSignal): RemoteStreamHandle<ProjectClientControlFrame, never>
   uiFollow: SessionRemote['follow']
   uiPage: SessionRemote['page']

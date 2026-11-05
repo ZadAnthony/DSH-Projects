@@ -26,7 +26,7 @@ import type { ProjectCommunicationInjected, ProjectCommunicationFileContext } fr
 import { projectSourceNavigation, type ProjectConversationFilePage } from '../../client/workflow-navigation.ts'
 import type { ProjectUiCarrierAddress, ProjectUiTarget, ProjectUiFileReadRequest, ProjectUiFileBytesRequest, ProjectUiChangesRequest, ProjectUiChangesDiffRequest, ProjectUiChangesSummary, ProjectUiSubagentInfo } from '../ui-host/types.ts'
 import { ProjectSessions } from './sessions.ts'
-import { ProjectRemoteShim, type FullProjectClientRemotePort } from './remote-shim.ts'
+import { ProjectRemoteShim, type FullProjectClientRemotePort, type ProjectInteractionSubmission } from './remote-shim.ts'
 import { ProjectClientPreferences, type ProjectClientPreferenceBridge } from './preferences.ts'
 import { installProjectNativeAccess } from './access.ts'
 import { applyProjectConversation, type ProjectDraftRegistry } from './compat/input/index.ts'
@@ -38,11 +38,12 @@ import { ProjectSubagentDomain, sameSubagentAddress } from './subagent/index.tsx
 import type { SubagentAddress } from '@deepseek-ai/dsh-subagent/client'
 import { ProjectMainModelControl } from '../../client/ProjectMainModelControl.tsx'
 import type { ProjectsTranslate } from '../../client/ui/copy.ts'
+import { ProjectReplyLinksHost, useProjectReplyLinksNavigation, type ProjectReplyLinksNavigation } from '../../client/ProjectReplySessionLinks.tsx'
 import { ErrorState, IconAction, IconCloseOutlineRegular, LoadingState, Tooltip } from '../../client/ui/index.ts'
 import type { WorkspaceFileDiff } from '@deepseek-ai/dsh-workspace-changes/types'
 import { en } from './native/locales/en.ts'
 import { zh } from './native/locales/zh.ts'
-import { ProjectMainWelcome, ProjectMainWelcomeContext } from './ProjectMainWelcome.tsx'
+import { ProjectMainWelcomeContext } from './ProjectMainWelcome.tsx'
 
 export interface FullProjectProductRemote extends FullProjectClientRemotePort, ProjectsRemote {
   uiConfigurationStatus(signal?: AbortSignal): Promise<RemoteResult<ProjectUiConfigurationStatus>>
@@ -121,13 +122,32 @@ function installProjectNativePaneSeats(ctx: Context): void {
 }
 
 function ProductRoot({ renderSlot, SessionProvider, domain, t }: PropsRuntime<'root'> & PropsLocale<'projects'> & PropsRenderSlots<'main' | 'shell.overlay' | 'projects.native.conversation' | 'projects.native.model'> & { readonly domain: FullProjectClientDomain }) {
+  const navigationFailure = useSyncExternalStore(domain.navigationFailure.subscribe, domain.navigationFailure.getSnapshot)
+  const submissionFailure = useSyncExternalStore(domain.submissionFailure.subscribe, domain.submissionFailure.getSnapshot)
   const bridge = useMemo<RenderBridge>(() => ({ Provider: SessionProvider,
     native: (focus, visible, identity) => renderSlot('projects.native.conversation', { focus, visible, identity }),
     model: () => renderSlot('projects.native.model', {}),
   }), [SessionProvider, renderSlot])
-  return <RenderContext.Provider value={bridge}><div className="dsh-projects-native-domain" style={{ width: '100%', height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column', position: 'relative' }}>
+  return <ProjectReplyLinksHost><RenderContext.Provider value={bridge}><div className="dsh-projects-native-domain" style={{ width: '100%', height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column', position: 'relative' }}>
+    {navigationFailure !== undefined && <ErrorState inline title={t('wholeRead.navigation.failed')} description={t('wholeRead.navigation.recovery')} diagnostic={{ label: t('wholeRead.navigation.failed'), content: navigationFailure }}>
+      <IconAction aria-label={t('wholeRead.navigation.dismiss')} title={t('wholeRead.navigation.dismiss')} icon={<IconCloseOutlineRegular />} onClick={() => domain.navigationFailure.set(undefined)} />
+    </ErrorState>}
+    {submissionFailure !== undefined && <ErrorState inline title={t('wholeRead.submission.failed')} description={t('wholeRead.submission.recovery')}>
+      <p>{t('wholeRead.submission.retained')}</p>
+      <SubmissionContent value={submissionFailure} translate={t} />
+      <IconAction aria-label={t('wholeRead.navigation.dismiss')} title={t('wholeRead.navigation.dismiss')} icon={<IconCloseOutlineRegular />} onClick={() => domain.submissionFailure.set(undefined)} />
+    </ErrorState>}
     {renderSlot('main', {}, { entryKey: 'projects' })}{renderSlot('shell.overlay', {})}<SubagentAsides domain={domain} translate={t} /><RecordedAside domain={domain} translate={t} />
-  </div></RenderContext.Provider>
+  </div></RenderContext.Provider></ProjectReplyLinksHost>
+}
+
+function SubmissionContent({ value: { item, response }, translate: t }: { readonly value: Extract<ProjectInteractionSubmission, { status: 'failed' }>; readonly translate: ProjectsTranslate }) {
+  if (response.kind === 'approval') return <p>{t('wholeRead.submission.approval')}：{t(`wholeRead.submission.outcome.${response.outcome}`)}</p>
+  if (response.kind !== 'question' || item.kind !== 'question') return null
+  return <dl>{response.answer.answers.map((answer, index) => {
+    const question = item.questions.find(question => question.id === answer.id)
+    return question === undefined ? null : <div key={index}><dt>{question.question}</dt><dd>{answer.selected.map((selection, index) => <p key={index}>{selection}</p>)}{answer.custom !== undefined && <p style={{ whiteSpace: 'pre-wrap' }}>{answer.custom}</p>}</dd></div>
+  })}</dl>
 }
 
 function LivePane({ panel, focus, visible = true, projectName }: { readonly panel: ProjectPanelReference; readonly focus: Focus; readonly visible?: boolean; readonly projectName?: string }) {
@@ -155,7 +175,7 @@ async function painted(signal?: AbortSignal): Promise<void> {
   signal?.throwIfAborted()
 }
 
-function NativePane({ domain, sessionId, useSession, useConversation, renderFactorySlot, renderSlot, focus, visible = true, identity }: PropsRuntime<'projects.native.conversation'> & PropsRenderFactories & PropsRenderSlots<'projects.native.session.actions' | 'projects.native.preset'> & { readonly domain: FullProjectClientDomain }) {
+function NativePane({ domain, sessionId, useSession, useConversation, renderFactorySlot, renderSlot, focus, visible = true, identity, t }: PropsRuntime<'projects.native.conversation'> & PropsLocale<'projects'> & PropsRenderFactories & PropsRenderSlots<'projects.native.session.actions' | 'projects.native.preset'> & { readonly domain: FullProjectClientDomain }) {
   const snapshot = useSession(value => value)
   const conversation = useConversation(value => value)
   const [failure, setFailure] = useState<string>()
@@ -186,18 +206,20 @@ function NativePane({ domain, sessionId, useSession, useConversation, renderFact
   const phase = snapshot.openState === 'loading' && snapshot.blank ? 'settling'
     : conversation.activeTargets.size === 0 && snapshot.blank && !snapshot.running ? 'hero' : 'active'
   const welcome = identity?.role === 'main' && phase === 'hero' && conversationPhase(snapshot, conversation) === 'blank'
-    ? { projectName: identity.projectName } : undefined
-  const preset = visible && phase === 'hero' && conversationPhase(snapshot, conversation) === 'blank'
+    ? { projectName: identity.projectName, description: t('p5.mainWelcome.description') } : undefined
+  const preset = visible && welcome === undefined && phase === 'hero' && conversationPhase(snapshot, conversation) === 'blank'
     ? <div className="projects-ui__preset-seat" data-project-preset-seat={sessionId}>{renderSlot('projects.native.preset', {})}</div> : null
   return <ProjectMainWelcomeContext.Provider value={welcome}><ProjectPresetDockContext.Provider value={preset}>
-    <div role="alert" hidden={failure === undefined}>{failure}</div>
-    {visible && <div className="projects-ui__native-actions" data-project-native-actions={sessionId}>{renderSlot('projects.native.session.actions', {})}</div>}
-    {renderFactorySlot('conversation.content', { variant: 'embedded', phase, hero: false })}
+    {failure !== undefined && <ErrorState inline title={t('whole.stock.reading.failed')} description={t('wholeRead.navigation.recovery')} diagnostic={{ label: t('whole.stock.reading.failed'), content: failure }} />}
+    {visible && welcome === undefined && <div className="projects-ui__native-actions" data-project-native-actions={sessionId}>{renderSlot('projects.native.session.actions', {})}</div>}
+    {renderFactorySlot('conversation.content', { variant: 'embedded', phase, hero: welcome !== undefined })}
   </ProjectPresetDockContext.Provider></ProjectMainWelcomeContext.Provider>
 }
 
 function ReaderPane({ domain, detail, binding, source, focus, visible = true, translate }: { readonly translate: ProjectsTranslate; readonly domain: FullProjectClientDomain; readonly detail: ProjectDetail; readonly binding: ProjectFileBinding; readonly source?: NativeProjectSource; readonly focus?: Focus; readonly visible?: boolean }) {
   const element = useRef<HTMLDivElement>(null)
+  const navigation = useProjectReplyLinksNavigation()
+  const latestNavigation = useRef(navigation); latestNavigation.current = navigation
   const [failure, setFailure] = useState<string>()
   const [mounted, setMounted] = useState<{ reader: ProjectReadDomain; reference: SessionReference }>()
   const sourceRequest = useSyncExternalStore(domain.sourceFocus.subscribe, domain.sourceFocus.getSnapshot)
@@ -212,8 +234,17 @@ function ReaderPane({ domain, detail, binding, source, focus, visible = true, tr
     let reader: ProjectReadDomain | undefined
     let release: (() => void) | undefined
     const start = async () => {
+      const replySessionNavigation: ProjectReplyLinksNavigation = {
+        projectId: binding.projectId,
+        onOpen: async target => {
+          const current = latestNavigation.current
+          if (abort.signal.aborted || current?.projectId !== binding.projectId) throw new DOMException('Project Reader navigation was replaced', 'AbortError')
+          await current.onOpen(target)
+        },
+      }
       reader = await ProjectReadDomain.create({ remote: domain.options.remote, connection: domain.options.connection, host: domain.options.host,
         fileReader: domain.fileReader, externalFiles: domain.options.externalFiles, language: domain.ctx.locale.getSnapshot().active, changedFiles: domain.changedFileReads, selectedTools: domain.readOnlyToolViews(),
+        replySessionNavigation,
         renderCommunicationMessage: props => domain.product.renderCommunicationMessage(props) })
       if (abort.signal.aborted) { await reader.dispose(); return }
       reader.adopt(detail)
@@ -251,7 +282,7 @@ function ReaderPane({ domain, detail, binding, source, focus, visible = true, tr
     return () => { abort.abort(); if (focusAttempt.current === abort) focusAttempt.current = undefined }
   }, [domain, mounted, source, sourceRequest, coordinate, visible])
   return <div className="projects-ui__stock-pane"><p className="projects-ui__stock-readonly" role="status">{translate('p5.reading.originalReadOnly')}</p>
-    {failure !== undefined ? <ErrorState title={translate('whole.stock.reading.failed')} description={failure} />
+    {failure !== undefined ? <ErrorState title={translate('whole.stock.reading.failed')} description={translate('wholeRead.navigation.recovery')} diagnostic={{ label: translate('whole.stock.reading.failed'), content: failure }} />
       : mounted === undefined ? <LoadingState label={translate('whole.stock.reading.loading')} rows={3} /> : null}
     <div ref={element} className="projects-ui__stock-pane-body" />
   </div>
@@ -305,7 +336,7 @@ function ChildAsidePane({ domain, entry, translate }: { readonly domain: FullPro
     return () => { live = false; if (child !== undefined) domain.retireView(child, release) }
   }, [domain, entry.key])
   return <div className="projects-ui__stock-pane">
-    {failure !== undefined ? <ErrorState title={translate('whole.stock.reading.failed')} description={failure} />
+    {failure !== undefined ? <ErrorState title={translate('whole.stock.reading.failed')} description={translate('wholeRead.navigation.recovery')} diagnostic={{ label: translate('whole.stock.reading.failed'), content: failure }} />
       : !mounted ? <LoadingState label={translate('whole.stock.reading.loading')} rows={3} /> : null}
     <div ref={element} className="projects-ui__stock-pane-body" />
   </div>
@@ -389,6 +420,18 @@ export class FullProjectClientDomain {
   }
   readonly drafts: ProjectDraftRegistry
   readonly failure = createSnapshotStore<string | undefined>(undefined)
+  readonly navigationFailure = createSnapshotStore<string | undefined>(undefined)
+  readonly submissionFailure = createSnapshotStore<Extract<ProjectInteractionSubmission, { status: 'failed' }> | undefined>(undefined)
+  private navigationAttempt = 0
+  /** Only an explicit navigation reports here; retained stream diagnostics never become a page notice. */
+  private navigate(action: () => Promise<void>): void {
+    const attempt = ++this.navigationAttempt
+    this.navigationFailure.set(undefined)
+    void action().catch(error => {
+      console.error('[dsh-projects] navigation failed', error)
+      if (attempt === this.navigationAttempt) this.navigationFailure.set(error instanceof Error ? error.message : String(error))
+    })
+  }
   readonly product: ReturnType<typeof installProjectProductUi>
   private readonly workspaces = createSnapshotStore<WorkspaceSnapshot>({ items: [], archivedSessionIds: [], pinnedSessionIds: [], state: 'idle', phase: 'ready', error: null })
   private readonly sourceBindings = new Map<string, ProjectFileBinding>()
@@ -442,6 +485,12 @@ export class FullProjectClientDomain {
     this.remote.attachSessions(this.sessions)
     ctx.effect(() => () => this.sessions.dispose(), 'Projects full Sessions')
     ctx.effect(() => this.remote.subscribeFailure(error => this.failure.set(error instanceof Error ? error.message : String(error))), 'Projects interaction failure surface')
+    ctx.effect(() => this.remote.subscribeInteractionSubmission(state => {
+      if (state.status === 'failed') {
+        console.error('[dsh-projects] interaction submission unconfirmed', state.error)
+        this.submissionFailure.set(state)
+      } else if (state.status === 'submitting' || this.submissionFailure.getSnapshot()?.requestId === state.requestId) this.submissionFailure.set(undefined)
+    }), 'Projects current interaction submission result')
     applyUiSession(ctx)
     this.readSessions = new ProjectReadSessions(this.readerContext, options.remote, options.connection, options.host)
     ctx.effect(() => () => this.readSessions.dispose(), 'Projects non-activating panel references')
@@ -460,13 +509,17 @@ export class FullProjectClientDomain {
     ctx.effect(() => () => this.fileReader.dispose(), 'Projects unified FileReader')
     ctx.effect(() => () => this.focusOwner.dispose(), 'Projects exact source focus')
     // File gestures are handled by the exact Chat closure. Plan/child resources get a separate owner below.
-    ctx.provide('sidebarRight', { openResource: (address: string, settings?: { params?: { line?: number } }) => { void this.fileReader.openResource(address, settings).catch(error => this.failure.set(String(error))) }, openTab: () => { throw new Error('Projects private tab is not registered') } })
+    ctx.provide('sidebarRight', { openResource: (address: string, settings?: { params?: { line?: number } }) => { this.navigate(() => this.fileReader.openResource(address, settings)) }, openTab: () => { throw new Error('Projects private tab is not registered') } })
     this.drafts = applyProjectConversation(ctx, { maxConcurrentFileUploads: 2 }, { resolveCarrier: binding => this.sessions.resolveCarrier(binding), isCurrent: address => this.sessions.isCurrent(address),
       upload: (address, body, name, signal, progress) => {
         if (!this.sessions.isCurrent(address)) throw new Error('PROJECT_INPUT_STALE: upload carrier was replaced before dispatch')
         return this.remote.fileUpload.upload(SessionId(address.hostSessionId), body, name, signal, progress)
       } })
     installProjectChat(ctx, { fileReader: this.fileReader, focusOwner: this.focusOwner, allowBranch: false,
+      replySessionLinkSource: id => {
+        const source = this.sourceBindings.get(id)
+        return source?.role === 'main' || source?.role === 'execution' ? { originProjectId: source.projectId, role: source.role } : undefined
+      },
       renderCommunicationMessage: props => this.product.renderCommunicationMessage(props) })
     applyTools(ctx); applyAttachments(ctx)
     this.product = installProjectProductUi(ctx, { remote: options.remote, sessions: this.sessions, generation: options.connection.generation,
@@ -495,9 +548,13 @@ export class FullProjectClientDomain {
       pickWorkspaceDirectory: options.pickWorkspaceDirectory,
       toggleGlobalSidebar: options.toggleGlobalSidebar, revealProjects: options.revealProjects })
     ctx.effect(() => () => this.product.dispose(), 'Projects full product UI')
-    ctx.slots.inject('conversation.input.dock', () => ctx.slots.register({ name: 'conversation.input.dock', id: 'projects-main-welcome', order: 10, locale: 'projects' }, ProjectMainWelcome))
+    ctx.effect(() => this.product.actions.hooks.projectNavigation.subscribe(() => {
+      this.navigationAttempt++
+      this.navigationFailure.set(undefined)
+      this.submissionFailure.set(undefined)
+    }), 'Projects navigation notice lifetime')
     ctx.slots.inject('conversation.input.dock', () => ctx.slots.register({ name: 'conversation.input.dock', id: 'projects-native-preset', order: 9 }, ProjectPresetDock))
-    ctx.slots.inject('projects.native.conversation', () => ctx.slots.register({ name: 'projects.native.conversation', children: {
+    ctx.slots.inject('projects.native.conversation', () => ctx.slots.register({ name: 'projects.native.conversation', locale: 'projects', children: {
       'projects.native.session.actions': { kind: 'list', scope: 'session' }, 'projects.native.preset': { kind: 'single', scope: 'session-maybe' },
     } }, props => <NativePane {...props} domain={this} />))
     installProjectNativePaneSeats(ctx)
@@ -514,8 +571,8 @@ export class FullProjectClientDomain {
   private async initialize(): Promise<void> {
     await this.ctx.inject(['conversation'], () => {})
     this.capabilities = await installProjectNativeCapabilities(this.ctx, { mode: 'live', remote: this.remote,
-      openResourceFallback: (url, settings) => { void this.fileReader.openResource(url, settings).catch(error => this.failure.set(String(error))) },
-      selectedTools: { remote: this.remote, uiWorkspace: { openSession: target => this.openNativeSession(target) }, openSubagentAside: address => { void this.openSubagentAside(address).catch(error => this.failure.set(String(error))) } },
+      openResourceFallback: (url, settings) => { this.navigate(() => this.fileReader.openResource(url, settings)) },
+      selectedTools: { remote: this.remote, uiWorkspace: { openSession: target => this.openNativeSession(target) }, openSubagentAside: address => { this.navigate(() => this.openSubagentAside(address)) } },
       currentSessionPickers: { permissionPresets: this.remote.permissionPresets, isProjectPaneCurrent: binding => this.isProjectPresetPaneCurrent(binding), agentPresets: { list: () => this.remote.agentPresets.list(), select: (binding, preset) => this.remote.captureAgentPreset(binding)(preset) }, developerTools: this.options.preferences.developerTools },
       presentedFiles: this.presentedFiles,
       changedFiles: { ...this.changedFileReads, openFile: (id, path, settings) => this.openPresentedFile(id, path, settings) } })
@@ -656,8 +713,8 @@ export class FullProjectClientDomain {
       skills: { list: (request, signal) => this.options.remote.uiSkills(request, signal) },
       job: { list: (request, signal) => this.options.remote.uiJobList(request, signal), follow: (request, signal) => this.options.remote.uiJobFollow(request, signal),
         kill: async () => { throw new Error('PROJECT_READ_ONLY: recorded job controls cannot mutate') } },
-    }, uiWorkspace: { openSession: target => { void this.openNativeSession(target).catch(error => this.failure.set(String(error))) } },
-      openSubagentAside: address => { void this.openSubagentAside(address).catch(error => this.failure.set(String(error))) } }
+    }, uiWorkspace: { openSession: target => { this.navigate(() => this.openNativeSession(target)) } },
+      openSubagentAside: address => { this.navigate(() => this.openSubagentAside(address)) } }
   }
   private asideRootCurrent(root: CarrierAddress, wasCurrent: boolean): boolean {
     try { return sameCarrier(this.sessions.carrierAddress(SessionId(root.hostSessionId)), root) && (!wasCurrent || this.sessions.isCurrent(root)) }

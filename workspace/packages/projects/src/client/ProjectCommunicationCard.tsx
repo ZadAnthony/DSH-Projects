@@ -9,6 +9,7 @@ import type {
   ReadProjectCommunicationRequest, ResolveProjectCommunicationNavigationRequest, ResolveProjectCommunicationFileRequest,
 } from '../public-types.ts'
 import { ProjectsToolCard } from './ProjectToolCard.tsx'
+import { formatUiDate } from './ui/date-format.ts'
 
 export interface ProjectCommunicationInvocationQuery {
   readonly holderHostSessionId: string
@@ -34,6 +35,7 @@ export interface ProjectCommunicationInjected {
   readCommunication: (request: ReadProjectCommunicationRequest, signal: AbortSignal) => Promise<ProjectCommunicationRead>
   resolveCommunicationNavigation: (request: ResolveProjectCommunicationNavigationRequest, signal?: AbortSignal) => Promise<ProjectCommunicationNavigation>
   resolveCommunicationFile: (request: ResolveProjectCommunicationFileRequest, signal?: AbortSignal) => Promise<ProjectCommunicationFile>
+  beginNavigation: () => () => void
   openTarget: (projectId: string, target: ProjectNavigationTarget) => Promise<void>
   openCommunicationFile: (path: string, context: ProjectCommunicationFileContext) => Promise<void>
 }
@@ -85,7 +87,7 @@ function useSaved(request: ReadProjectCommunicationRequest | undefined, read: Ac
   return state.key === key ? state : { key: undefined }
 }
 
-function Link({ saved, target, label, resolveCommunicationNavigation, openTarget, t }: {
+function Link({ saved, target, label, resolveCommunicationNavigation, beginNavigation, openTarget, t }: {
   saved: Saved; target: ResolveProjectCommunicationNavigationRequest['target']; label: string
 } & Actions & Locale) {
   const [link, setLink] = useState<ProjectCommunicationNavigation>()
@@ -102,15 +104,25 @@ function Link({ saved, target, label, resolveCommunicationNavigation, openTarget
     return () => { controller.abort() }
   }, [request, resolveCommunicationNavigation])
   const open = async () => {
+    const assertCurrent = beginNavigation()
+    let resolving = true
     setOpening(true); setFailure(undefined)
     try {
       const current = await resolveCommunicationNavigation(request)
+      assertCurrent()
       setLink(current)
-      if (current.kind === 'available') await openTarget(current.projectId, { ...current.target, focusEventSeq: current.eventSeq, ...current.messageId === undefined ? {} : { focusMessageId: current.messageId } })
-    } catch (error) { setFailure(describeFailure(error)) } finally { setOpening(false) }
+      if (current.kind === 'available') {
+        resolving = false
+        await openTarget(current.projectId, { ...current.target, focusEventSeq: current.eventSeq, ...current.messageId === undefined ? {} : { focusMessageId: current.messageId } })
+      }
+    } catch (error) {
+      // Once openTarget starts it owns the next generation and its own cancellation.
+      if (resolving) { try { assertCurrent() } catch { return } }
+      if (error === null || typeof error !== 'object' || !('name' in error) || error.name !== 'AbortError') setFailure(describeFailure(error))
+    } finally { setOpening(false) }
   }
   return <span className="dsh-projects-communication__link">
-    <Button variant="ghost" size="sm" disabled={opening || failure === undefined && link?.kind !== 'available'} aria-busy={opening} onClick={() => { void open() }}>
+    <Button variant="outline" size="sm" disabled={opening || failure === undefined && link?.kind !== 'available'} aria-busy={opening} onClick={() => { void open() }}>
       {label}{link?.kind === 'unavailable' ? ` · ${t('communication.sourceUnavailable')}` : ''}
     </Button>
     {link?.kind === 'unavailable' && <span className="dsh-projects-communication__hint">{link.reason}</span>}
@@ -153,6 +165,12 @@ function Image({ attachment, loadImage, t }: {
   </a>
 }
 
+function OriginTime({ value, t }: { readonly value: number } & Locale) {
+  const date = new Date(value)
+  const iso = Number.isFinite(date.getTime()) ? date.toISOString() : undefined
+  return <time dateTime={iso} title={iso ?? String(value)}>{formatUiDate(value, t, { seconds: true })}</time>
+}
+
 type Visible = ProjectCommunicationSnapshot['contextParts'][number]['blocks'][number]
 function Blocks({ blocks, saved, loadImage, openFile, actions, t }: {
   blocks: readonly Visible[]; saved: Saved; loadImage: MessageImageLoader; openFile: OpenCommunicationFile; actions: Actions
@@ -178,7 +196,7 @@ function Content({ saved, loadImage, openFile, actions, t }: {
   const parts = (items: ProjectCommunicationSnapshot['contextParts']) => items.map(part => <section key={part.id} className="dsh-projects-communication__part">
     <div className="dsh-projects-communication__partHeader">
       <span>{t(`communication.speaker.${part.originalSpeaker}`)}</span>
-      <time dateTime={new Date(part.originTime).toISOString()}>{new Date(part.originTime).toLocaleString()}</time>
+      <OriginTime value={part.originTime} t={t} />
       <Link saved={saved} target={{ kind: 'part-origin', partId: part.id }} label={t('communication.source')} {...actions} t={t} />
     </div>
     <Blocks blocks={part.blocks} saved={saved} loadImage={loadImage} openFile={openFile} actions={actions} t={t} />
@@ -206,8 +224,7 @@ function Facts({ saved, t }: { saved: Saved } & Locale) {
       {saved.facts.admissionPersistence !== undefined && <p>{t('p3.cards.communication.admissionSave', { value: t(`communication.persistence.${saved.facts.admissionPersistence}`) })}</p>}
       <p>{t(`communication.wakeup.${saved.facts.wakeup}`)}</p>
     </div>}
-    <p>{t('p3.cards.communication.readingUnconfirmed')}</p>
-    <p>{t('p3.cards.communication.completionUnconfirmed')}</p>
+    {saved.result !== 'delivered' && <p>{t('p3.cards.communication.readingUnconfirmed')}{t('p5.common.semicolon')}{t('p3.cards.communication.completionUnconfirmed')}</p>}
     {saved.failure !== undefined && <p className="dsh-project-feedback__error">{saved.failure.message}</p>}
     {saved.facts?.error !== undefined && <p className="dsh-project-feedback__error">{saved.facts.error.message}</p>}
   </div>

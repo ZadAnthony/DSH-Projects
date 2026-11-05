@@ -145,7 +145,7 @@ export interface ProjectsRemote {
   create(
     input: CreateProjectRequest,
   ): Promise<RemoteResult<CreateProjectResult>>;
-  get(input: GetProjectRequest): Promise<RemoteResult<ProjectDetail>>;
+  get(input: GetProjectRequest, signal?: AbortSignal): Promise<RemoteResult<ProjectDetail>>;
   watch(input: GetProjectRequest): RemoteStreamHandle<ProjectDetail, never>;
   createSession(
     input: CreateProjectSessionRequest,
@@ -306,6 +306,8 @@ export interface ProjectsPanelActions {
     input: CreateProjectRequest,
   ) => Promise<CreateProjectResult>;
   readonly getProject: (projectId: ProjectId) => Promise<ProjectDetail>;
+  /** A speculative navigation read must not invalidate or replace the displayed bindings. */
+  readonly readProjectSnapshot: (projectId: ProjectId, signal?: AbortSignal) => Promise<ProjectDetail>;
   readonly createExecutionSession: (
     input: CreateProjectSessionRequest,
   ) => Promise<ProjectDetail>;
@@ -351,6 +353,8 @@ export interface ProjectsPanelActions {
   ) => Promise<ProjectEnvironmentView>;
   readonly usageActions: ProjectUsageActions;
   readonly watchProject: (detail: ProjectDetail) => void;
+  /** Claim a viewing intent without changing the current screen; assert after each awaited read. */
+  readonly beginNavigation: () => () => void;
   readonly openTarget: (
     projectId: ProjectId,
     target: ProjectNavigationTarget,
@@ -595,6 +599,17 @@ export class ProjectsPanelController {
         this.applySourceInvalidations(detail);
         return detail;
       },
+      readProjectSnapshot: async (projectId, signal) => {
+        signal?.throwIfAborted();
+        try {
+          const result = await this.remote.get({ projectId }, signal);
+          signal?.throwIfAborted();
+          return valueOf(result);
+        } catch (error) {
+          signal?.throwIfAborted();
+          throw error;
+        }
+      },
       createExecutionSession: async (input) => {
         const detail = valueOf(await this.remote.createSession(input));
         this.applySourceInvalidations(detail);
@@ -662,14 +677,17 @@ export class ProjectsPanelController {
         await this.openTarget(request.projectId, { kind: request.role, sessionId: request.sessionId });
       },
       locateProjectSource: async (projectId, source, read) => {
-        const detail = valueOf(await this.remote.get({ projectId }));
+        const assertCurrent = this.beginNavigation();
+        const detail = await this.readNavigationProject(projectId, assertCurrent);
         this.applySourceInvalidations(detail);
         const target = projectSourceNavigation(detail, source, read);
         if (target === undefined) throw new Error('这条来源没有可定位的原会话坐标；仍可读取原话。');
         const session = detail.sessions.find(row => row.id === target.sessionId);
         const carrier = session?.carriers?.find(row => row.isCurrent && row.hostSessionId === session.hostSessionId);
-        await this.openTarget(projectId, target, target.source === undefined ? { hostSessionId: source.hostSessionId,
+        assertCurrent();
+        const assertOpened = await this.openTarget(projectId, target, target.source === undefined ? { hostSessionId: source.hostSessionId,
           sessionCreatedAt: carrier?.sessionCreatedAt } : undefined);
+        assertOpened();
         await this.bindings?.onSourceFocus?.({ detail, source, read });
       },
       openLibraryOriginal: async target => {
@@ -774,6 +792,7 @@ export class ProjectsPanelController {
       watchProject: (detail) => {
         this.watchProject(detail);
       },
+      beginNavigation: () => this.beginNavigation(),
       openTarget: async (projectId, target, expectedCarrier) => {
         await this.openTarget(projectId, target, expectedCarrier);
       },
@@ -1105,10 +1124,10 @@ export class ProjectsPanelController {
     projectId: ProjectId,
     target: ProjectNavigationTarget,
     expectedCarrier?: { readonly hostSessionId: string; readonly sessionCreatedAt?: number | undefined },
-  ): Promise<void> {
-    const requestId = ++this.navigationId;
-    const detail = valueOf(await this.remote.get({ projectId }));
-    if (requestId !== this.navigationId) throw new DOMException('Project navigation was superseded or closed', 'AbortError');
+  ): Promise<() => void> {
+    const assertCurrent = this.beginNavigation();
+    const requestId = this.navigationId;
+    const detail = await this.readNavigationProject(projectId, assertCurrent);
     this.applySourceInvalidations(detail);
     this.assertTarget(detail, target);
     if (expectedCarrier !== undefined) {
@@ -1127,6 +1146,21 @@ export class ProjectsPanelController {
       id: requestId, detail, target,
       executionSessionId: target.kind === "execution" ? target.sessionId : keepExecution,
     });
+    return assertCurrent;
+  }
+
+  /** Existing generation is shared by body links, cards, and exact-source navigation. */
+  private beginNavigation(): () => void {
+    const requestId = ++this.navigationId;
+    return () => {
+      if (requestId !== this.navigationId) throw new DOMException('Project navigation was superseded or closed', 'AbortError');
+    };
+  }
+
+  private async readNavigationProject(projectId: ProjectId, assertCurrent: () => void): Promise<ProjectDetail> {
+    const result = await this.remote.get({ projectId }).catch(error => { assertCurrent(); throw error; });
+    assertCurrent();
+    return valueOf(result);
   }
 
   private assertTarget(

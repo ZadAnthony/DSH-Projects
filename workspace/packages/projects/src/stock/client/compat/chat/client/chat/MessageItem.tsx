@@ -52,11 +52,13 @@ function failureMessage(
   message: string,
   code: unknown,
   t: ChatViewSlotProps['t'],
+  fallback: string = message,
 ): string {
   if (code === 'ACCOUNT_SIGNED_OUT') return t('message.failure.accountSignedOut')
   if (code === 'ACCOUNT_SIGN_IN_REQUIRED') return t('message.failure.accountSignInRequired')
   if (code === 'QUOTA' || code === 'ACCOUNT_QUOTA') return t('message.failure.quota')
-  return code === 'AUTH' ? t('message.failure.auth') : message
+  if (code === 'INTERRUPTED') return t('message.failure.interrupted')
+  return code === 'AUTH' ? t('message.failure.auth') : fallback
 }
 
 function ModelRetryItem({ node, active, t }: {
@@ -128,18 +130,36 @@ function ModelRetryItem({ node, active, t }: {
 }
 
 /** Persistent, turn-positioned feedback for a terminal failure. */
-function TurnErrorItem({ node, t }: {
+function TurnErrorItem({ node, t, projectStatusText }: {
   node: TurnErrorNode
   t: ChatViewSlotProps['t']
-}) {
+} & Pick<ChatViewSlotProps, 'projectStatusText'>) {
+  // A failed row belongs to its durable turn/end event, even when later turns
+  // have succeeded. Do not infer recovery or replace the event's timestamp.
+  const date = new Date(node.time)
+  const validTime = Number.isFinite(date.getTime())
+  const timestamp = validTime
+    ? `${t('clock.ymd', { y: date.getFullYear(), m: date.getMonth() + 1, d: date.getDate() })} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
+    : projectStatusText('failure.timeUnknown')
   return (
-    <div className={css.turnErrorRow} role="status">
+    <div className={css.turnErrorRow} role="status" data-turn-error={node.turn} data-turn-error-seq={node.seq}>
       <StateDot state="error" className={css.turnErrorDot} />
       <div className={css.turnErrorCopy}>
-        <span className={css.turnErrorTitle}>{node.code === 'ACCOUNT_SIGNED_OUT' ? t('message.stopped') : t('message.turnError')}</span>
-        <span className={css.turnErrorMessage}>{failureMessage(node.message, node.code, t)}</span>
+        <div className={css.turnErrorHeading}>
+          <span className={css.turnErrorTitle}>{projectStatusText(node.code === 'ACCOUNT_SIGNED_OUT' ? 'failure.stoppedTurn' : 'failure.failedTurn', { turn: node.turn })}</span>
+          <time className={css.turnErrorTime} dateTime={validTime ? date.toISOString() : undefined}>{projectStatusText('failure.occurredAt', { time: timestamp })}</time>
+        </div>
+        <div className={css.turnErrorMessage}>{node.message.trim() === 'Attachment object is missing.'
+          ? projectStatusText('failure.attachmentMissing')
+          : failureMessage(node.message, node.code, t, projectStatusText('failure.unrecognized'))}</div>
+        {(node.message !== '' || node.code !== undefined) && (
+          <details className={css.turnErrorDetails}>
+            <summary>{projectStatusText('failure.details')}</summary>
+            {node.message !== '' && <div><span>{projectStatusText('failure.originalMessage')}</span><pre>{node.message}</pre></div>}
+            {node.code !== undefined && <div>{projectStatusText('failure.code')}<code>{node.code}</code></div>}
+          </details>
+        )}
       </div>
-      {node.code !== undefined && <code className={css.turnErrorCode}>{node.code}</code>}
     </div>
   )
 }
@@ -371,8 +391,8 @@ export const RetryNodeView = memo(function RetryNodeView({ node, t }: ChatNodeVi
 })
 
 /** Terminal turn-error keyed Chat renderer. */
-export const TurnErrorNodeView = memo(function TurnErrorNodeView({ node, t }: ChatNodeViewProps<'turn-error'>) {
-  return <TurnErrorItem node={node.data} t={t} />
+export const TurnErrorNodeView = memo(function TurnErrorNodeView({ node, t, projectStatusText }: ChatNodeViewProps<'turn-error'> & Pick<ChatViewSlotProps, 'projectStatusText'>) {
+  return <TurnErrorItem node={node.data} t={t} projectStatusText={projectStatusText} />
 })
 
 /** Max-tokens turn-end notice keyed Chat renderer. */

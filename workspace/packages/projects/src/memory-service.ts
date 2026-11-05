@@ -40,6 +40,8 @@ export interface MemorySourceEvidence {
   isUserDecision: boolean
   text?: string
   reason?: string
+  /** 程序读取异常只供诊断，不作为来源正文或用户可见原因。 */
+  diagnostic?: string
   /** 历史业务定位仅借此指向实际消息/tool；不得把旧记录正文作为原话。 */
   nativeLocator?: MemoryNativeSource
   /** 保留原生说话者、producer、时间、相邻正文及读取限制，不用target纯文本冒充完整来源。 */
@@ -363,7 +365,8 @@ export class ProjectMemoryService {
     if (read.current.length === 0 && read.withdrawn.length === 0) return {
       projectId: access.projectId, readable: false, isUserDecision: false,
       reason: read.issues.length === 0 ? '当前项目没有与该设置来源标识关联的已保存记忆或撤回标记。'
-        : '无法从当前可读记忆核实该设置来源：' + read.issues.map(issue => issue.message).join('; '),
+        : '部分记忆文件当前无法读取，暂时无法核实该设置来源。',
+      ...(read.issues.length === 0 ? {} : { diagnostic: read.issues.map(issue => issue.message).join('; ') }),
     }
     return {
       projectId: access.projectId, readable: true, isUserDecision: true,
@@ -380,8 +383,11 @@ export class ProjectMemoryService {
           '关联记忆的最小撤回标记；不提供已撤回正文或摘要，也不能据此恢复旧内容。',
           JSON.stringify({ projectId: access.projectId, memoryId: marker.id, withdrawnAt: marker.withdrawnAt }),
         ].join('\n')),
-        ...(read.issues.length === 0 ? [] : ['其它记忆文件读取限制：', JSON.stringify(read.issues)]),
       ].join('\n'),
+      ...(read.issues.length === 0 ? {} : {
+        limitations: ['部分记忆文件当前无法读取；显示的关联信息可能不完整。'],
+        diagnostic: read.issues.map(issue => issue.message).join('; '),
+      }),
     }
   }
 }

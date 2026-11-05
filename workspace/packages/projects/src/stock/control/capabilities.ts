@@ -1,3 +1,4 @@
+import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { ContentBlock, MessageId } from '@deepseek-ai/dsh-llm'
 import type { SessionId } from '@deepseek-ai/dsh-session'
@@ -93,9 +94,17 @@ function ownedRun<T extends { result: Promise<unknown>; dispose(): Promise<void>
  */
 export function createOwnedStockCapabilities(ownership: StockCapabilityOwnership): OwnedStockCapabilities {
   class ProjectJobRegistry extends LocalJobRegistry {
+    constructor(private readonly ownerContext: Context, config: ConstructorParameters<typeof LocalJobRegistry>[1]) {
+      super(ownerContext, config)
+    }
+
     override start(spec: JobSpec): JobId {
       if (spec.owner === undefined) throw new Error('PROJECT_JOB_OWNER_REQUIRED: background work requires its exact Project Agent')
-      const owner = this.ctx.agents.get(spec.owner)
+      // Cordis 将 this.ctx 重绑定到可能只注入 jobs 的调用方。
+      // 与原生一致，从本 provider 的私有 Graph 显式解析 owner。
+      const agents = this.ownerContext.get('agents')
+      if (agents === undefined) throw new Error('background job ownership requires the agent registry (load @deepseek-ai/dsh-agent)')
+      const owner = agents.get(spec.owner)
       if (owner === undefined) throw new Error(`session "${spec.owner}" has no live agent (background job owner must be live)`)
       ownership.assertAdmitting(owner.id, owner)
       return super.start({

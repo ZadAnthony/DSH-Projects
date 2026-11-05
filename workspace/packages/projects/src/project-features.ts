@@ -211,12 +211,14 @@ export class ProjectFeatureModules {
       },
       readRuntime: async access => {
         const { snapshot } = await this.core.forProject(access.projectId)
+        // The registry contains only this process's loaded instances. Retained
+        // sessions may stay cold until activation; absence is not a task result.
         const live = new Map(this.ctx.agents.list().map(agent => [String(agent.id), agent]))
         return { status: 'available', readAt: new Date().toISOString(), value: snapshot.sessions.filter(availableWorkSession).map(session => {
           const agent = live.get(session.hostSessionId)
           return { sessionId: session.id, state: agent === undefined ? 'unknown' as const
             : agent.status === 'running' ? 'running' as const : 'idle' as const,
-            observedAt: new Date().toISOString(), ...(agent === undefined ? { reason: '当前宿主无活动 Agent。' } : {}) }
+            observedAt: new Date().toISOString(), ...(agent === undefined ? { reason: '当前进程没有加载此会话的活动实例；仅凭此信息无法判断任务结果。' } : {}) }
         }) }
       },
       readSource: (access, reference) => this.readOverviewSource(access, reference),
@@ -243,7 +245,14 @@ export class ProjectFeatureModules {
     const base = { projectId: access.projectId, reference, readAt, status: 'available' as const }
     if (reference.kind === 'native') {
       const read = await this.core.readSource(access.projectId, reference.source)
-      if (!read.readable) return unavailable(read.reason ?? '原聊天当前不可读。', 'unreadable')
+      if (!read.readable) {
+        const explanation = read.code === 'deleted' ? '来源会话已删除。'
+          : read.code === 'not-found' ? '原始记录不存在或不在可读取范围。'
+          : read.code === 'stale-source' ? '来源内容已变化，请从原入口重新打开。'
+          : read.code === 'invalid-source' || read.code === 'ambiguous-source' ? '当前来源位置无法确认，请从原聊天重新打开。'
+          : '原聊天当前不可读，可刷新看板后重试。'
+        return { ...unavailable(explanation, 'unreadable'), ...(read.reason === undefined ? {} : { diagnostic: read.reason }) }
+      }
       return { ...base, label: '原聊天', rows: (read.nativeItems ?? []).filter(item => item.isTarget).map(item => ({
         id: `${reference.source.hostSessionId}:${item.seq}`, title: item.sourceKind === 'project-delivery' ? 'Agent 转达' : '原始聊天',
         fields: [{ label: '时间', value: new Date(item.time).toISOString() }, { label: '内容', value: item.text }],
@@ -271,7 +280,10 @@ export class ProjectFeatureModules {
     const sessionId = access.actor.kind === 'session' ? access.actor.sessionId : view.project.mainSessionId
     if (sessionId === undefined) return unavailable('项目没有可读取文件的会话。')
     const opened = await this.library.open({ projectId: access.projectId, sessionId, location: reference.location })
-    if (opened.status === 'unavailable') return unavailable(opened.message, 'unreadable')
+    if (opened.status === 'unavailable') {
+      const explanation = { missing: '原文件缺失。', permissionDenied: '没有读取原文件的权限。', tooLarge: '原文件超过读取大小限制。', unsupported: '当前不支持读取该文件类型。', readFailed: '原文件当前位置读取失败，可刷新看板后重试。' }[opened.reason]
+      return { ...unavailable(explanation, 'unreadable'), diagnostic: opened.message }
+    }
     const location = opened.target.kind === 'url' ? opened.target.url : opened.target.path
     return { ...base, label: '实际文件入口', rows: [{ id: JSON.stringify(reference.location), title: opened.name,
       fields: [{ label: '位置', value: location }, { label: '本次读取', value: opened.status === 'url' ? '网页入口，未核查远端内容' : opened.status === 'file' ? `${opened.byteLength} 字节` : '当前目录' }],

@@ -4,6 +4,7 @@ import type { SessionBinding } from '@deepseek-ai/dsh-api-session-controller/cli
 import type { ChatSnapshot } from '../compat/chat/client/contract/snapshot.ts'
 import type { ReactNode } from 'react'
 import type { MessageImageLoader } from '@deepseek-ai/dsh-client-ui-conversation/client'
+import type { ProjectReplyLinkSource } from '../../../client/ProjectReplySessionLinks.tsx'
 export interface ProjectCommunicationMessagePresentation {
   readonly sessionId: string
   readonly message: { readonly source: unknown; readonly messageId?: string }
@@ -20,6 +21,8 @@ export interface InstallProjectChatOptions {
   readonly fileReader: ProjectFileReaderOwner
   readonly focusOwner?: ProjectFocusOwner
   readonly allowBranch: false
+  /** Resolve the actual work-role owner of the presented physical Session; absent for children and Bots. */
+  readonly replySessionLinkSource?: ((hostSessionId: string) => ProjectReplyLinkSource | undefined) | undefined
   readonly renderCommunicationMessage?: (presentation: ProjectCommunicationMessagePresentation) => ReactNode
 }
 export interface ProjectChatFocusRegistration {

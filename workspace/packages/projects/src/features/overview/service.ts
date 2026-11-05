@@ -117,7 +117,7 @@ export class OverviewService {
 
   async #source(access: OverviewAccess, reference: OverviewSourceRef): Promise<OverviewSourceView> {
     try { return currentSource(access.projectId, reference, await this.options.core.readSource(access, reference)) } catch (error) {
-      return unavailableSource(access.projectId, reference, this.#now(), errorMessage(error), 'unreadable')
+      return { ...unavailableSource(access.projectId, reference, this.#now(), '当前无法读取该来源，请刷新看板后重试。', 'unreadable'), diagnostic: errorMessage(error) }
     }
   }
 

@@ -271,7 +271,7 @@
 
 .turnErrorRow {
   display: grid;
-  grid-template-columns: 10px minmax(0, 1fr) auto;
+  grid-template-columns: 10px minmax(0, 1fr);
   gap: 8px;
   align-items: start;
   padding: 2px 0;
@@ -298,9 +298,36 @@
   color: var(--dsw-alias-label-secondary);
 }
 
-.turnErrorCode {
+.turnErrorHeading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 8px;
+}
+
+.turnErrorTime,
+.turnErrorDetails {
   color: var(--dsw-alias-label-tertiary);
-  font: var(--dsw-font-markdown-code-block-small);
+}
+
+.turnErrorDetails {
+  margin-top: 2px;
+}
+
+.turnErrorDetails summary {
+  cursor: pointer;
+}
+
+.turnErrorDetails pre {
+  margin: 2px 0 4px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: inherit;
+}
+
+.turnErrorDetails code {
+  overflow-wrap: anywhere;
+  font: inherit;
 }
 
 .maxTokensTitle {

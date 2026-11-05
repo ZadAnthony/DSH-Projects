@@ -1,12 +1,12 @@
 /** Projects adaptation: waking communication uses the same saved-copy renderer as other inputs. */
 import type { Context } from '@deepseek-ai/cordis'
-import { createElement, type ComponentType } from 'react'
+import { createElement, type ComponentProps, type ComponentType } from 'react'
 import type { InstallProjectChatOptions } from '../../../../read/install-chat.tsx'
 import type { ChatNodeViewProps } from '../contract/slots.ts'
 import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
 import type { PerformanceUsageMode } from '../../chat-settings.ts'
 import type { ChatPresentationPolicy } from '../presentation-policy.ts'
-import { NS } from '../locale.ts'
+import { NS, STATUS_NS } from '../locale.ts'
 import { AssistantNodeView } from './AssistantNodeView.tsx'
 import { CommandNodeView, ManualCompactionNodeView } from './CommandNodeView.tsx'
 import {
@@ -44,6 +44,14 @@ export function registerChatNodeRenderers(
   const User = communication(UserMessageNodeView)
   const Context = communication(ContextMessageNodeView)
   const Trigger = communication(TurnTriggerNodeView)
+  const Assistant = (props: ComponentProps<typeof AssistantNodeView>) => createElement(AssistantNodeView, {
+    ...props, replySessionLinkSource: options.replySessionLinkSource?.(props.sessionId),
+  })
+  // Projects-only copy stays in its own namespace, without widening the
+  // native Chat locale contract shared with other plugins.
+  const projectStatusText = ctx.locale.bind(STATUS_NS)
+  const TurnError = (props: ChatNodeViewProps<'turn-error'>) => createElement(TurnErrorNodeView, { ...props, projectStatusText })
+  const TurnProcess = (props: ChatNodeViewProps<'turn-process'>) => createElement(TurnProcessNodeView, { ...props, projectStatusText })
 
   ctx.slots.inject('conversation.chat.node', () => ctx.slots.register(
     { name: 'conversation.chat.node', key: 'user', locale: NS }, User))
@@ -60,7 +68,7 @@ export function registerChatNodeRenderers(
     key: 'assistant-step',
     locale: NS,
     inject: () => ({ hooks: { presentation } }),
-  }, AssistantNodeView))
+  }, Assistant))
   ctx.slots.inject('conversation.chat.node', () => ctx.slots.register({
     name: 'conversation.chat.node',
     key: 'command',
@@ -74,11 +82,11 @@ export function registerChatNodeRenderers(
   ctx.slots.inject('conversation.chat.node', () => ctx.slots.register(
     { name: 'conversation.chat.node', key: 'model-retry', locale: NS }, RetryNodeView))
   ctx.slots.inject('conversation.chat.node', () => ctx.slots.register(
-    { name: 'conversation.chat.node', key: 'turn-error', locale: NS }, TurnErrorNodeView))
+    { name: 'conversation.chat.node', key: 'turn-error', locale: NS }, TurnError))
   ctx.slots.inject('conversation.chat.node', () => ctx.slots.register(
     { name: 'conversation.chat.node', key: 'turn-max-tokens', locale: NS }, TurnMaxTokensNodeView))
   ctx.slots.inject('conversation.chat.node', () => ctx.slots.register(
-    { name: 'conversation.chat.node', key: 'turn-process', locale: NS }, TurnProcessNodeView))
+    { name: 'conversation.chat.node', key: 'turn-process', locale: NS }, TurnProcess))
   ctx.slots.inject('conversation.chat.node', () => ctx.slots.register({
     name: 'conversation.chat.node',
     key: 'turn-tail',

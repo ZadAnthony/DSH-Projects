@@ -1,4 +1,5 @@
 /** Product copy for the current Projects client surface. Each key owns one Chinese/English pair. */
+import { PROJECT_HISTORY_SESSION_LINK_COPY, PROJECT_HISTORY_PARTIAL_PREVIEW_COPY } from '../project-history-types.ts';
 // Namespace paths share their prefixes. An empty child key is the namespace's own copy.
 // Identical labels share exact pairs; each namespace keeps its own key.
 const cancelCopy = ["取消","Cancel"] as const;
@@ -14,6 +15,7 @@ const projectSettingsCopy = ["项目设置","Project settings"] as const;
 const backToSessionsCopy = ["返回会话","Back to sessions"] as const;
 const searchProjectsCopy = ["搜索项目","Search projects"] as const;
 const createProjectCopy = ["创建项目","Create project"] as const;
+const projectInstructionsCopy = ["项目说明与要求","Project description and requirements"] as const;
 const cancelEditingCopy = ["取消编辑","Cancel editing"] as const;
 const projectFilesCopy = ["项目文件","Project files"] as const;
 const mainSessionCopy = ["主会话","Main session"] as const;
@@ -28,6 +30,12 @@ const saveCopy = ["保存","Save"] as const;
 const allCopy = ["全部","All"] as const;
 
 const catalog = {
+  "replySessionLinks": {
+    "unavailable": ["暂时无法打开该会话，请稍后再试。", "This conversation could not be opened. Try again later."]
+  },
+  "experience": {
+    "dateLocale": ["zh-CN","en-US"],
+  },
   "ui.select": {
     "current": ["当前选择：{values}", "Current selection: {values}"],
     "empty": ["未选择", "None selected"],
@@ -58,6 +66,23 @@ const catalog = {
     }
   },
   "wholeRead": {
+    "submission": {
+      "failed": ["提交结果尚未确认", "Submission result unconfirmed"],
+      "recovery": ["刚才的回答或审批可能已收到，请先核对当前会话中的最新状态。系统不会自动重复提交。", "Your answer or approval may have been received. Check the latest state in this conversation before submitting again. It will not be resent automatically."],
+      "retained": ["刚才提交的内容已保留，以下内容供你核对。", "Your submitted content has been kept below for you to check."],
+      "approval": ["刚才选择的审批决定", "Approval decision you selected"],
+      "outcome": {
+        "allowed-once": ["仅允许这一次", "Allow once"],
+        "rejected": ["拒绝", "Reject"],
+        "cancelled": ["取消", "Cancel"],
+        "unavailable": ["未取得可用决定", "No decision available"]
+      }
+    },
+    "navigation": {
+      "failed": ["未能打开该内容", "Could not open this content"],
+      "recovery": ["本次打开未完成。请返回原入口再试；仍无法打开时，可刷新项目面板。", "Opening this content did not complete. Try its original entry again, or refresh the Projects panel if it still cannot open."],
+      "dismiss": ["关闭提示", "Dismiss notice"]
+    },
     "projectUpdates": {
       "title": ["项目状态更新已中断", "Project status updates stopped"],
       "previous": ["当前显示上次读取的项目状态，可能已过期。", "Showing the last project state read; it may be out of date."],
@@ -76,11 +101,11 @@ const catalog = {
       "multipleFailures": ["项目运行中有错误记录", "Projects has reported runtime errors"],
       "details": ["查看来源与完整详情（{count}）", "View sources and full details ({count})"],
       "detailsRegion": ["运行提示原始详情", "Original runtime notice details"],
-      "scope": ["这里保留最近收到的错误或提示。是否关联当前项目、会话或页面，以及是否已经恢复，请核对对应对象的最新结果。", "These are retained errors or notices. Check the relevant object's latest result to determine whether they concern the current project, session, or page and whether recovery has occurred."]
+      "scope": ["历史运行提示可能与当前页面无关；是否恢复，以对应对象的最新结果为准。","Retained runtime notices may not concern this page. Check the relevant object's latest result for recovery status."]
     },
     "library": {
-      "retained": ["仍显示上次读取的目录与引用（{at}）；当前内容尚未确认。", "Still showing the directory and references last read at {at}; current contents are unconfirmed."],
-      "retainedAfterWrite": ["已保留本页确认的引用更新；其余仍来自上次读取（{at}），当前内容尚未完全确认。", "Confirmed reference updates from this page are retained; other contents are from the last read at {at} and are not fully confirmed current."],
+      "retained": ["显示 {at} 读取的目录与引用；当前内容未确认。","Showing directories and references read at {at}; current contents are unconfirmed."],
+      "retainedAfterWrite": ["本页引用更新已确认；其余为 {at} 读取的内容，当前状态未确认。","Reference updates on this page are confirmed. Other contents were read at {at}; their current state is unconfirmed."],
       "countUnconfirmed": ["当前数量尚未确认", "Current count unconfirmed"],
       "writeScopeMismatch": ["引用保存返回了其他项目的数据，当前保存结果尚未确认。", "The reference save returned another project's data; this save result is unconfirmed."]
     },
@@ -89,8 +114,8 @@ const catalog = {
       "scopeMismatch": ["用量返回范围不符合当前筛选。", "The returned usage scope does not match the applied filters."]
     },
     "schedule": {
-      "retained": ["仍显示上次读取的计划与运行历史（{at}）；当前状态尚未确认。", "Still showing schedules and run history last read at {at}; current state is unconfirmed."],
-      "retainedAfterWrite": ["已保留本页确认的计划更新；其余计划与运行历史仍来自上次读取（{at}），当前状态尚未完全确认。", "Confirmed schedule updates from this page are retained; other schedules and run history are from the last read at {at} and are not fully confirmed current."],
+      "retained": ["显示 {at} 读取的计划与运行历史；当前状态未确认。","Showing schedules and run history read at {at}; current state is unconfirmed."],
+      "retainedAfterWrite": ["本页计划更新已确认；其余计划与运行历史读取于 {at}，当前状态未确认。","Schedule updates on this page are confirmed. Other schedules and run history were read at {at}; their current state is unconfirmed."],
       "timeUnconfirmed": ["下次计划时间尚未重新读取确认", "Next planned time has not been reread and confirmed"]
     },
     "recorded": {
@@ -146,19 +171,27 @@ const catalog = {
     "retry": retryCopy
   },
   "create": {
+    "unconfirmed": ["项目创建结果尚未确认，请先查看项目列表，避免重复创建。","Project creation is unconfirmed. Check the project list before creating again."],
+    "errorDetails": ["错误详情","Error details"],
     "workspace": {
+      "error": {
+        "absoluteRequired": ["请填写工作区的绝对目录路径。","Enter an absolute folder path for the workspace."],
+        "notFound": ["此工作区路径不存在，请核对后修改。","This workspace path does not exist. Check and correct it."],
+        "notDirectory": ["此路径不是目录，请选择或填写文件夹路径。","This path is not a folder. Choose or enter a folder path."],
+        "unreadable": ["无法读取此工作区路径，请检查访问权限或改用其他路径。","Could not read this workspace path. Check access permissions or use another path."],
+      },
       "choose": {
         "": ["选择目录", "Choose folder"],
         "error": ["无法打开目录选择，请重试或手动填写路径。", "Could not open the folder picker. Try again or enter a path."]
       },
       "choosing": ["正在选择…", "Choosing…"],
-      "label": workspacePathCopy,
+      "label": ["工作区（选填）", "Workspace (optional)"],
       "placeholder": ["/path/to/workspace", "/path/to/workspace"],
-      "note": ["可选。主会话将在此工作。", "Optional. The main conversation will work here."]
+      "note": ["主会话将在此目录工作。", "The main conversation will work in this folder."]
     },
     "discard": {
       "title": ["放弃创建项目？", "Discard this project draft?"],
-      "description": ["已填写的名称和工作区路径将被清空。", "The name and workspace path you entered will be cleared."],
+      "description": ["已填写的名称、项目说明与要求和工作区将被清空。", "The name, project description and requirements, and workspace you entered will be cleared."],
       "keep": ["继续编辑", "Keep editing"],
       "submit": ["放弃草稿", "Discard draft"]
     },
@@ -168,11 +201,16 @@ const catalog = {
       "label": nameCopy,
       "placeholder": ["例如：产品首版", "For example: First product release"]
     },
+    "instructions": {
+      "label": ["项目说明与要求（选填）", "Project description and requirements (optional)"],
+      "placeholder": ["介绍项目用途、目标，以及需要持续遵守的要求。", "Describe the project’s purpose, goals, and requirements to follow throughout."],
+      "note": ["供主会话与执行会话共同参考，之后可在设置中修改。", "Shared with main and execution conversations. You can edit this later in settings."]
+    },
     "submit": createProjectCopy,
     "cancel": cancelCopy,
-    "error": ["无法创建项目。项目未打开，请检查后重试。", "Could not create the project. It was not opened; check the details and try again."],
-    "mainUnavailable": ["项目已创建；主会话尚未确认可读，请稍后从项目列表打开。", "The project was created; its main conversation is not confirmed readable yet. Open it from the project list later."],
-    "partialWarning": ["项目已创建并打开，但后续操作未完全完成：{value}", "The project was created and opened, but a later operation was not fully completed: {value}"]
+    "error": ["项目创建失败，尚未打开。","Project creation failed; the project was not opened."],
+    "mainUnavailable": ["项目已创建，主会话可读性未确认；请稍后从项目列表打开。","Project created; main conversation readability is unconfirmed. Open it from the project list later."],
+    "partialWarning": ["项目已创建并打开；部分后续操作未完成：{value}","Project created and opened; later operations are incomplete: {value}"]
   },
   "project": {
     "conversations": {
@@ -249,6 +287,11 @@ const catalog = {
       "empty": ["未关联工作区。", "No workspace linked."]
     },
     "history": {
+      "previous": ["上一批","Previous batch"],
+      "nextBatch": ["下一批","Next batch"],
+      "firstBatch": ["返回首批","Back to first batch"],
+      "batchNumber": ["第 {page} 批","Batch {page}"],
+      "retainedSnapshot": ["本次读取未成功，下方仍为此前读取的第 {page} 批。","This read did not succeed. Showing the previously read batch {page}."],
       "title": ["聊天记录", "Chat history"],
       "keyword": {
         "": ["关键词", "Keywords"],
@@ -256,6 +299,8 @@ const catalog = {
       },
       "fromTime": ["开始时间（本地时区）", "From (local time)"],
       "toTime": ["结束时间（本地时区）", "To (local time)"],
+      "invalidTimeRange": ["结束时间须晚于开始时间。", "The end time must be later than the start time."],
+      "invalidLocalTime": ["请输入有效的本地日期和时间。", "Enter a valid local date and time."],
       "session": ["会话", "Session"],
       "allSessions": ["全部项目会话", "All Project sessions"],
       "speaker": {
@@ -280,6 +325,14 @@ const catalog = {
       "hideVersions": ["收起阶段／版本", "Hide stages/versions"],
       "versions": ["消息阶段与版本", "Message stages and versions"],
       "versionMatches": ["命中本次查询", "Matches this search"],
+      "sessionLink": PROJECT_HISTORY_SESSION_LINK_COPY,
+      "partialPreview": PROJECT_HISTORY_PARTIAL_PREVIEW_COPY,
+      "savedReplyFragment": ["这是保存时的回复片段，仅展示截至当时已保存的内容；后续内容未知。", "This saved reply fragment shows only the content recorded at that time. Later content is unknown."],
+      "recordDetails": ["记录详情与前后文", "Record details and context"],
+      "surroundingRecords": ["相邻记录", "Surrounding records"],
+      "incompleteReference": ["会话引用未完整保存", "Session reference was not fully saved"],
+      "originalRecord": ["原始记录", "Original record"],
+      "imageAlternative": ["图片（原文无替代文字）", "Image (no alternative text in the original)"],
       "openVersion": ["查看 {phase} 阶段原文，{time}", "View original {phase} record at {time}"],
       "nextVersions": ["继续读取阶段／版本", "Load more stage/version records"],
       "sender": ["来自 {value}", "from {value}"],
@@ -456,6 +509,20 @@ const catalog = {
       "knownRemaining": ["已确认剩余：{value} 项", "Confirmed remaining: {value} artifacts"]
     },
     "new": {
+      "startAnother": ["另建一个会话","Start another session"],
+      "anotherWarning": ["上次创建结果未确认，另建可能产生重复会话。","The previous creation result is unconfirmed. Creating another session may make a duplicate."],
+      "failure": ["创建未完成","Creation did not complete"],
+      "failureHelp": ["暂时无法创建会话。填写内容已保留，请稍后再试。", "The session could not be created right now. Your input has been kept. Try again later."],
+      "partial": ["创建未完整完成，部分内容可能已保存。请先核对现有会话，避免重复创建。","Creation did not fully complete. Some content may have been saved. Check the existing session before creating again."],
+      "checked": ["已核对到会话「{name}」。","Found session “{name}”."],
+      "unresolved": ["尚未确认可打开的会话；这不表示没有创建。","An openable session has not been confirmed. This does not mean no session was created."],
+      "inputRetained": ["你的名称输入已保留。","Your title has been kept."],
+      "recheck": ["重新核对创建结果","Check creation result again"],
+      "checking": ["正在核对创建结果…","Checking creation result…"],
+      "viewList": ["查看会话列表","View session list"],
+      "openExisting": ["打开已核对的会话","Open confirmed session"],
+      "details": ["创建结果详情","Creation details"],
+      "readFailure": ["未能核对创建结果，请稍后重试。", "The creation result could not be checked. Try again later."],
       "location": {
         "": ["新会话工作位置", "New session location"],
         "default": ["使用项目当前默认", "Use current project default"],
@@ -467,7 +534,7 @@ const catalog = {
       "": ["新建执行会话", "New execution session"],
       "label": ["会话名称", "Session name"],
       "placeholder": ["例如：资料整理", "For example: Research notes"],
-      "submit": ["新建执行会话", "New execution conversation"],
+      "submit": ["创建","Create"],
       "cancel": cancelCopy,
       "error": ["无法新建执行会话。请稍后重试。", "Could not create the execution session. Try again shortly."]
     },
@@ -488,11 +555,11 @@ const catalog = {
     }
   },
   "communication": {
-    "noPreparedRecord": ["尚无可读取的完整发件记录；投递结果以原操作为准。", "No complete sender record is readable; check the original operation for delivery facts."],
+    "noPreparedRecord": ["暂无完整发件记录；投递结果请核对原操作。","No complete sender record is readable. Check the original operation for delivery status."],
     "toolReceipt": ["查看调用记录", "View call record"],
     "sent": ["发消息", "Send message"],
     "received": ["收到项目消息", "Project message received"],
-    "toolStopped": ["工具执行已停止；实际投递结果以保存记录为准。", "Tool execution stopped. The saved record shows the actual delivery facts."],
+    "toolStopped": ["工具已停止；投递结果以保存记录为准。","Tool stopped; check the saved record for delivery status."],
     "sourceUnavailable": ["原入口不可用", "Original entry unavailable"],
     "sourceReadError": ["无法核对来源入口。", "The source entry could not be verified."],
     "attachmentUnavailable": ["附件当前不可读取。", "Attachment is currently unavailable."],
@@ -515,12 +582,12 @@ const catalog = {
     "readError": ["保存记录读取失败。", "The saved record could not be read."],
     "unsupported": ["不支持此通信格式；无法展示完整记录。", "This communication format is unsupported."],
     "unavailable": ["该保存记录当前不可读取。", "This saved record is currently unavailable."],
-    "preparing": ["正在准备发送记录；尚未确认投递。", "Preparing the saved message; delivery is not confirmed."],
+    "preparing": ["正在准备发件记录 · 投递未确认","Preparing sender record · Delivery unconfirmed"],
     "loading": ["正在读取保存的通信…", "Loading saved communication…"],
     "senderSave": ["发件保存：{value}", "Sender persistence: {value}"],
     "recipientSave": ["收件保存：{value}", "Recipient persistence: {value}"],
     "result": {
-      "delivered": ["已送达；这不表示对方已读取、理解或完成。", "Delivered. Reading, understanding, and task completion are not implied."],
+      "delivered": ["已送达；读取、理解与完成未确认。","Delivered; reading, understanding, and completion are unconfirmed."],
       "not-delivered": ["未送达。", "Not delivered."],
       "unknown": ["投递结果未知，请核对原操作；不会自动重发。", "Delivery is unknown. Check the original operation; no automatic resend occurs."],
       "preparation-interrupted": ["准备已中断，尚未确认投递。", "Preparation was interrupted; delivery is not confirmed."]
@@ -612,7 +679,7 @@ const catalog = {
       "board": {
         "tab": ["看板", "Overview"]
       },
-      "bodyRange": ["当前显示第 {start}–{end} 字，共 {total} 字；可打开原会话位置继续阅读。", "Showing characters {start}–{end} of {total}. Open the original conversation to continue reading."],
+      "bodyRange": ["第 {start}–{end} 字 / 共 {total} 字。","Characters {start}–{end} of {total}."],
       "deletion": {
         "summary": ["删除后不可恢复。将删除本项目会话、记忆和项目自有数据；外部工作区与引用原件保留。", "Deletion cannot be undone. This project’s conversations, Memory and owned data will be deleted. External workspaces and referenced originals will be kept."]
       },
@@ -652,32 +719,46 @@ const catalog = {
       }
     },
     "library": {
+      "chooseFile": ["选择文件","Choose file"],
+      "chooseDirectory": ["选择文件夹","Choose folder"],
+      "chooseFailed": ["未能选择，请重试或手动输入路径。","Could not choose. Try again or enter the path manually."],
+      "readingView": ["阅读","Read"],
+      "rawView": ["原文","Source"],
+      "viewMode": ["显示方式","Display mode"],
+      "markdownCopy": ["复制","Copy"],
+      "markdownCopied": ["已复制","Copied"],
+      "markdownCode": ["代码","Code"],
+      "markdownWrap": ["自动换行","Wrap lines"],
+      "markdownUnwrap": ["取消自动换行","Unwrap lines"],
+      "markdownFootnotes": ["脚注","Footnotes"],
+      "returnConversation": ["返回会话","Back to conversation"],
+      "feedback": ["反馈","Give feedback"],
       "actionFailed": ["操作未完成", "Operation did not complete"],
       "add": ["添加引用", "Add reference"],
       "addExternal": ["添加外部引用", "Add external reference"],
       "back": ["返回资料列表", "Back to library"],
       "bytes": ["{bytes} 字节", "{bytes} bytes"],
-      "changedBetweenReads": ["文件在两次读取间发生变化；当前显示本次读取的段落，其他段落需要重新读取。", "The file changed between reads. This page shows the current read; other pages need to be read again."],
+      "changedBetweenReads": ["文件已变化；当前段落为本次读取，其余段落需重读。","The file changed. This page is from the current read; reread other pages."],
       "clearSearch": ["清除查找", "Clear search"],
       "conversationNotRead": ["尚未取得文件正文。", "File content is not available yet."],
-      "conversationOrigin": ["打开来源：{session}。这条线索记录本次打开位置，不表示文件作者或内容已经完成。", "Opened from {session}. This records the opening location and does not establish authorship or completed content."],
+      "conversationOrigin": ["打开入口：{session}；不表示作者或完成状态。","Opened from {session}; this does not identify authorship or completion."],
       "conversationReadFailed": ["未能读取这份文件", "Could not read this file"],
-      "conversationReadFailedHelp": ["位置来自原会话文件入口；本次没有取得可供阅读的正文。", "The location comes from the original session file entry. This read returned no readable text."],
+      "conversationReadFailedHelp": ["未取得正文；文件位置来自原会话。","No content was read. The file location comes from the original conversation."],
       "count": ["{count} 项", "{count} items"],
       "description": ["说明", "Description"],
       "descriptionPlaceholder": ["需要时用于辨认这份材料", "An optional description to identify this item"],
       "directory": ["项目文件目录", "Project file directory"],
       "directoryFailed": ["项目目录读取失败", "Could not read the project directory"],
-      "directoryTruncated": ["宿主限制了目录列表，以上不是全部文件。", "The Host limited the directory listing; this is not the complete list."],
+      "directoryTruncated": ["仅显示部分目录，已达宿主限制。","Partial directory listing; the Host limit was reached."],
       "download": ["下载本次读取内容", "Download this read"],
-      "downloadHelp": ["已取得本次读取的文件内容，可下载查看。", "The file content from this read is available to download."],
+      "downloadHelp": ["可下载本次读取的文件内容。","Download the file content from this read."],
       "empty": ["当前目录没有文件", "No files in the current directory"],
       "emptyDirectoryRead": ["本次读取的目录没有条目。", "The directory returned no entries in this read."],
       "emptyHelp": ["添加文件或引用外部目录", "Add files or reference an external directory"],
       "emptyPartial": ["已读取的范围内没有资料。", "No items in the sources that were read."],
       "endOfFile": [" · 已读取至文件末尾。", " · Reached the end of the file."],
       "explicitReference": ["显式引用", "Explicit reference"],
-      "failedReadHelp": ["文件名与位置来自目录条目，不表示本次读取成功。", "The name and location come from the directory entry and do not indicate a successful read."],
+      "failedReadHelp": ["本次未取得正文；名称与位置来自目录。","No content was read. The name and location come from the directory."],
       "failure": {
         "missing": ["原文件缺失", "Original file missing"],
         "permissionDenied": ["没有读取权限", "Read permission denied"],
@@ -726,11 +807,11 @@ const catalog = {
         "project": ["项目位置引用", "Project location reference"],
         "workspace": ["工作区引用", "Workspace reference"]
       },
-      "pageSnapshotHelp": ["各段分别读取，不代表同一时刻的完整文件。", "Pages are read separately and do not form a complete file snapshot from one moment."],
+      "pageSnapshotHelp": ["各段分别读取，可能来自不同时刻。","Pages are read separately and may be from different times."],
       "parentDirectory": ["上一级", "Parent directory"],
       "partialCount": ["{count} 项 · 部分未读取", "{count} items · Some sources were not read"],
       "partialPage": [" · 分段读取，以上不是完整文件。", " · Read in pages; this is not the complete file."],
-      "pathPlaceholder": ["文件或文件夹路径", "File or folder path"],
+      "pathPlaceholder": ["绝对路径或相对当前会话的路径","Absolute path or path relative to the current session"],
       "pendingRead": ["本次读取尚未完成。", "This read is still in progress."],
       "previousPage": ["上一段", "Previous page"],
       "processing": ["处理中…", "Processing…"],
@@ -747,7 +828,7 @@ const catalog = {
       "readVersion": ["本次读取版本：", "Read version:"],
       "reading": ["正在读取实际位置…", "Reading the original location…"],
       "readingFile": ["正在读取实际文件…", "Reading the actual file…"],
-      "referenceHelp": ["只保留引用，原件仍在原位置；移除引用不删除原件。添加本身不启动工作。", "Only a reference is saved. The original stays in its location, and removing a reference does not delete it. Adding a reference does not start work."],
+      "referenceHelp": ["仅保存引用；移除引用不删除原件。","Only a reference is saved. Removing it keeps the original."],
       "referenceHelpLabel": ["引用保存说明", "About saving references"],
       "referenceKind": ["引用类型", "Reference type"],
       "referenceLocationUnknown": ["显式引用位置尚未取得", "The reference location is not available yet"],
@@ -766,23 +847,27 @@ const catalog = {
       "retry": ["重试读取", "Retry reading"],
       "returnForFeedback": ["回原会话继续交流", "Continue in original session"],
       "search": ["查找当前目录与引用", "Search current directory and references"],
-      "searchHelp": ["查找当前目录与已登记引用的名称、引用说明或位置，不搜索文件正文。", "Search names, descriptions, or locations in the current directory and registered references, without searching file contents."],
+      "searchHelp": ["查找当前目录和引用的名称、说明或位置，不搜索正文。","Search names, descriptions, or locations in the current directory and registered references, excluding file contents."],
       "searchPlaceholder": ["名称、引用说明或位置", "Name, reference description, or location"],
       "session": ["会话：", "Session:"],
-      "sourcesHelp": ["这些来源说明引用的添加，不表示文件作者、负责会话或内容已核对。", "These sources explain why the reference was added. They do not establish the author, responsible session, or verified content."],
+      "sourcesHelp": ["仅记录引用添加，不确认作者、负责会话或内容。","These record how the reference was added, without confirming its author, responsible conversation, or content."],
       "sourcesHelpLabel": ["引用来源说明", "About reference sources"],
       "sourcesTitle": ["添加引用的依据", "Sources for adding this reference"],
       "title": ["资料", "Library"],
       "totalBytes": ["文件总大小 {bytes} 字节", "Total file size: {bytes} bytes"],
       "totalBytesUnknown": ["文件总字节数未报告", "Total file bytes not reported"],
-      "urlDetails": ["仅保留原网址，未读取网页内容，未核实可访问情况。", "Only the original URL is saved. Page content and accessibility have not been checked."],
+      "urlDetails": ["仅保存网址；未读取网页或核实可访问性。","Only the URL is saved; page content and accessibility were not checked."],
       "urlPlaceholder": ["https://…", "https://…"],
       "viewSource": viewSourceCopy,
-      "webNotRead": ["未读取网页内容，可访问情况以原站为准。", "Page content has not been read. Accessibility depends on the original site."],
+      "webNotRead": ["未读取网页内容，可访问性未核实。","Page content has not been read; accessibility is unverified."],
       "webReference": ["网页引用", "Web reference"]
     },
     "memory": {
       "add": ["添加记忆", "Add memory"],
+      "readIssues": ["部分记忆信息尚未确认，可刷新后核对。", "Some memory information is unconfirmed. Refresh to check the current state."],
+      "indexUnsynchronized": ["记忆索引尚未同步；当前列表来自可读取的记忆正文。", "The memory index is not synchronized. The current list comes from readable memory content."],
+      "writeFailed": ["本次记忆修改未完成，请核对当前内容后再试。", "This memory change did not complete. Check the current content before trying again."],
+      "writeResultUnconfirmed": ["未能确认本次记忆修改的结果，请核对当前内容后再决定是否重试。", "The result of this memory change could not be confirmed. Check the current content before deciding whether to try again."],
       "all": allCopy,
       "back": ["返回记忆列表", "Back to memory list"],
       "body": ["正文", "Content"],
@@ -794,7 +879,7 @@ const catalog = {
       "current": ["当前记忆", "Current memory"],
       "detailEmpty": ["项目的长期背景", "Long-term project context"],
       "detailEmptyDescription": ["从列表选择记忆，或添加一份。", "Choose a memory from the list, or add one."],
-      "directory": ["共同要求与共享记忆", "Project requirements and shared memory"],
+      "directory": ["项目说明与要求、共享记忆", "Project description and requirements, and shared memory"],
       "edit": ["编辑与纠正", "Edit and correct"],
       "editTitle": ["纠正：{title}", "Correct: {title}"],
       "editing": editingCopy,
@@ -807,7 +892,7 @@ const catalog = {
         "sourceProject": ["来源不属于当前项目。", "The source does not belong to this project."]
       },
       "help": ["共享记忆的提供与纠正规则", "How shared memories are supplied and corrected"],
-      "helpDescription": ["类型只用于组织，不限制手动填写。记忆索引自动提供，正文由工作模型按需读取；共同要求与单会话指令完整提供，分别保存。", "Types organize content and do not restrict manual entries. The memory index is supplied automatically; the working model reads content as needed. Project requirements and individual conversation instructions are supplied in full and saved separately."],
+      "helpDescription": ["类型只用于组织，不限制手动填写。记忆索引自动提供，正文由工作模型按需读取；项目说明与要求、单会话指令完整提供，分别保存。", "Types organize content and do not restrict manual entries. The memory index is supplied automatically; the working model reads content as needed. Project description and requirements and individual conversation instructions are supplied in full and saved separately."],
       "label": ["背景与记忆", "Background and memory"],
       "legacyTargets": [" 原范围：{targets}", " Original scope: {targets}"],
       "listError": ["记忆列表暂未取得", "The memory list could not be loaded"],
@@ -827,8 +912,8 @@ const catalog = {
       "refresh": ["刷新共享记忆列表", "Refresh shared memory list"],
       "reload": ["重新读取当前正文", "Reload current content"],
       "removed": ["该记忆已撤回或不存在。", "This memory was withdrawn or no longer exists."],
-      "requirements": ["本项目共同要求", "Project requirements"],
-      "requirementsDescription": ["主会话与执行会话共同使用", "Used by the main and execution conversations"],
+      "requirements": projectInstructionsCopy,
+      "requirementsDescription": ["主会话与执行会话共用","Shared by main and execution conversations"],
       "resume": ["返回：{title}", "Return to {title}"],
       "resumeDraft": ["继续编辑：{title}", "Continue editing {title}"],
       "retry": retryCopy,
@@ -895,6 +980,7 @@ const catalog = {
       "summaryDetails": ["摘要与分类", "Summary and classification"],
       "summaryLabel": ["记忆摘要", "Memory summary"],
       "targets": ["选择适用对象", "Choose targets"],
+      "targetsRequired": ["请至少选择一个适用会话。", "Select at least one conversation."],
       "targetsUnavailable": ["适用对象尚未接入，请在会话中指定局部范围。", "Targets are not connected yet. Specify a local scope in a conversation."],
       "title": ["标题", "Title"],
       "titleLabel": ["记忆标题", "Memory title"],
@@ -925,7 +1011,7 @@ const catalog = {
       "contents": ["看板内容", "Board contents"],
       "summary": ["概况", "Overview"],
       "fullContentSources": ["完整内容与来源", "Full content and sources"],
-      "legacyContent": ["此区块尚无概况，以下保留完整内容。", "This block has no overview yet. Its complete content is shown below."],
+      "legacyContent": ["暂无概况，以下为完整内容。","No overview yet; full content follows."],
       "sourceCount": ["{count} 处依据", "{count} sources"],
       "sourceIssues": ["来源状态与限制", "Source status and limitations"],
       "bodyHeading": ["完整内容", "Full content"],
@@ -942,13 +1028,16 @@ const catalog = {
       "loading": ["正在读取看板与来源…", "Reading the board and sources…"],
       "navigationUnavailable": ["{label}（查看入口未接入）", "{label} (view entry not connected)"],
       "noContentSource": ["暂无内容与来源。", "No content or sources yet."],
-      "noSource": ["未附来源；需要核对时请查原聊天或文件。", "No source attached. Check the original chat or file when verification is needed."],
+      "noSource": ["未附来源，可到原聊天或文件核对。","No source attached. Check the original chat or file."],
       "noSourceRows": ["当前可读来源未提供条目。", "This readable source returned no entries."],
       "originalDetails": ["原记录与限制", "Original record and limitations"],
       "originalTime": ["原记录时间：", "Original record time:"],
       "projectUnavailable": ["项目基本信息当前不可读", "Project information is currently unreadable"],
       "readFailed": ["看板读取失败", "Could not read the board"],
-      "readHelp": ["本次读取完成：{time}。不同来源分别读取，不代表同一时刻的完整快照。查看与刷新不会开始工作或改写看板，整体调整可在主会话继续讨论。", "Read completed: {time}. Sources are read separately and do not form a single snapshot. Viewing or refreshing does not start work or edit the board. Discuss overall changes in the main session."],
+      "readRecovery": ["未取得本次看板内容，请刷新后重试。", "The current board content was not obtained. Refresh to try again."],
+      "factsRecovery": ["未取得当前项目的信息，可刷新看板重试。", "Current project information was not obtained. Refresh the board to try again."],
+      "runtimeRecovery": ["当前无法确认会话是否正在运行，可刷新看板重试。", "Whether sessions are running is currently unconfirmed. Refresh the board to try again."],
+      "readHelp": ["读取于 {time}。各来源分别读取，可能来自不同时刻；看板调整请在主会话讨论。","Read at {time}. Sources are read separately and may be from different times. Discuss board changes in the main conversation."],
       "readHelpLabel": ["看板读取说明", "About reading the board"],
       "readOnly": ["主会话维护 · 只读", "Maintained by main session · Read only"],
       "refresh": ["刷新看板", "Refresh board"],
@@ -1027,7 +1116,7 @@ const catalog = {
         "title": ["当前主会话", "Current main conversation"]
       },
       "memory": {
-        "description": ["共同要求与共享记忆", "Shared requirements and memory"]
+        "description": ["项目说明与要求、共享记忆", "Project description and requirements, and shared memory"]
       },
       "model": {
         "help": {
@@ -1049,8 +1138,8 @@ const catalog = {
         }
       },
       "requirements": {
-        "open": ["查看背景与共同要求", "View context and project requirements"],
-        "related": ["同时使用本项目共同要求，二者分别保存。", "Project requirements also apply. Save each separately."]
+        "open": ["查看项目说明与要求", "View project description and requirements"],
+        "related": ["同时使用项目说明与要求，二者分别保存。", "Project description and requirements also apply. Save each separately."]
       },
       "saving": ["保存中…", "Saving…"],
       "usage": {
@@ -1070,14 +1159,14 @@ const catalog = {
     "usage": {
       "allMetrics": ["全部用量指标", "All usage metrics"],
       "breakdown": ["已报告用量来源占比", "Reported usage by source"],
-      "description": ["当前范围已采集用量；缺报不计入数值，部分标识及缺失范围可查。", "Collected usage in the current scope. Missing reports are excluded from values; partial data and missing sources remain available."],
+      "description": ["仅汇总已报告用量。","Totals include reported usage only."],
       "empty": ["暂无已采集用量", "No collected usage yet"],
       "metric": {
         "cacheReadTokens": ["缓存读取", "Cache reads"],
         "outputTokens": ["输出", "Output"],
         "totalTokens": ["总 Token", "Total tokens"]
       },
-      "partial": ["部分已采集", "Partially collected"],
+      "partial": ["部分已报告","Partially reported"],
       "role": {
         "execution": ["执行会话", "Execution"],
         "main": ["主会话", "Main"],
@@ -1087,9 +1176,9 @@ const catalog = {
       "share": {
         "partial": ["已报告部分占比", "Share of reported usage only"],
         "reported": ["已报告用量占比", "Share of reported usage"],
-        "unattributed": ["来源分项与已报告总量尚未对应，不显示占比。", "Source subtotals do not match the reported total. Percentages are unavailable."],
-        "unavailable": ["总 Token 尚未采集，不显示占比。", "Total tokens have not been collected. Percentages are unavailable."],
-        "zero": ["当前范围已报告总 Token 为 0，不显示占比。", "Reported total tokens are 0 in this scope. Percentages are unavailable."]
+        "unattributed": ["来源未完全对应，暂无占比。","Source totals do not match; shares are unavailable."],
+        "unavailable": ["总量未知，暂无占比。","Total unknown; shares are unavailable."],
+        "zero": ["总量为 0，暂无占比。","Total is 0; shares are unavailable."]
       },
       "summary": ["当前范围已采集用量", "Collected usage in the current scope"],
       "title": ["用量摘要", "Usage summary"],
@@ -1101,6 +1190,7 @@ const catalog = {
       "description": ["这里是项目主会话，用来讨论目标、安排执行会话和汇总进展。", "This is your project’s main conversation. Discuss goals, coordinate execution conversations, and bring progress together here."]
     },
     "model": {
+      "settingsOperationFailed": ["模型配置操作未完成，请重新读取并核对当前选择。", "The model settings operation did not complete. Reload and check the current selection."],
       "disconnected": ["连接已断开，模型配置暂不可修改。","Disconnected. Model settings cannot be changed right now."],
       "loadingMainSettings": ["正在读取主会话模型配置…","Loading main session model settings…"],
       "mainModel": ["主会话模型","Main session model"],
@@ -1138,16 +1228,36 @@ const catalog = {
       "sentenceBoundary": [""," "]
     },
     "settings": {
+      "simple": {
+        "recheck": ["重新核对","Check saved value"],
+        "rechecking": ["正在核对…","Checking…"],
+        "recheckFailed": ["暂时无法核对已保存内容，请稍后重试核对。","Couldn't check the saved value. Try checking again later."],
+        "basics": ["基础信息","Basic information"],
+        "models": ["模型","Models"],
+        "mainModel": ["主会话","Main session"],
+        "mainModelScope": ["当前主会话使用的模型","Model used by the current main session"],
+        "executionModel": ["新执行会话","New execution sessions"],
+        "executionModelScope": ["仅用于新执行会话","Applies to new execution sessions"],
+        "workspaceHelp": ["留空使用项目目录；仅用于新会话。","Leave blank to use the project directory. Applies to new conversations."],
+        "autosave": ["修改后自动保存","Changes save automatically"],
+        "saved": ["已保存","Saved"],
+        "retry": ["重试保存","Retry save"],
+        "location": ["实际工作位置","Working directory"],
+        "locationHelp": ["只读；修改默认工作区不会迁移已有会话。","Read only. Changing the default workspace does not move existing conversations."],
+        "workspaceSubmittedSaved": ["上次提交已保存；当前修改未保存。","Previous submission saved; current changes are unsaved."],
+      },
       "navigation": {
         "busy": ["当前设置正在读取或保存，请稍候再切换或关闭。","Settings are being loaded or saved. Please wait before switching or closing."]
       },
       "workspace": {
+        "checked": ["当前已保存工作区：{value}；输入内容仍未保存。","Saved workspace: {value}. Your current input is still unsaved."],
         "saved": ["默认工作区已保存；只供之后新建会话采用。本次没有启动了解或工作，已有会话与文件保留原位置。","Default workspace saved for conversations created from now on. This did not start any exploration or work. Existing conversations and files remain in their original locations."],
         "conflict": ["项目已被其它窗口修改。当前默认工作区：{value}；你的输入已保留，请核对后重新保存。","Another window has modified this project. Current default workspace: {value}. Your input has been kept. Please review it and save again."],
         "saveUnconfirmed": ["默认工作区保存结果未确认，内容可能已更新；你的输入已保留，请刷新核对。","The default workspace save result is unconfirmed; it may have been updated. Your input has been kept. Refresh to check."],
         "saveFailed": ["默认工作区保存失败，未报告成功。","Failed to save the default workspace. Success was not reported."]
       },
       "name": {
+        "checked": ["当前已保存名称：{value}；输入内容仍未保存。","Saved name: {value}. Your current input is still unsaved."],
         "required": ["项目名称不能为空。","Project name cannot be empty."],
         "saved": ["项目名称已保存。","Project name saved."],
         "submittedSaved": ["提交的项目名称已保存；之后输入的名称仍未保存。","The submitted project name was saved. Changes entered afterward are still unsaved."],
@@ -1161,6 +1271,10 @@ const catalog = {
       },
       "execution": {
         "defaultsWrongProject": ["默认配置不属于当前项目。","The default configuration does not belong to the current project."],
+        "modelUnavailable": ["所选模型当前不在可用目录中；已保存配置保留。", "The selected model is not currently available. The saved configuration is retained."],
+        "reasoningUnavailable": ["所选思考强度当前不受该模型支持；已保存配置保留。", "The selected reasoning effort is not supported by this model. The saved configuration is retained."],
+        "saveUnavailable": ["所选模型或思考强度当前不可用，未替换已保存配置。", "The selected model or reasoning effort is currently unavailable. The saved configuration was not replaced."],
+        "saveFailed": ["本次保存未完成，当前选择已保留。请先刷新核对已保存配置。", "This save did not complete. Your selection is retained. Refresh and check the saved configuration first."],
         "inheritDsh": ["沿用 DSH 默认","Use DSH defaults"],
         "resultWrongProject": ["返回配置不属于当前项目。","The returned configuration does not belong to the current project."],
         "saved": ["已保存新执行会话默认；之后新建时采用，已有会话继续使用各自配置。","Defaults for new execution conversations saved. They apply to conversations created from now on. Existing conversations keep their own configurations."],
@@ -1174,9 +1288,9 @@ const catalog = {
         "savedUnavailable": ["已保存默认当前不可用","Saved defaults are currently unavailable"],
         "savedLabel": ["当前已保存的新建默认","Currently saved defaults for new conversations"],
         "loading": ["正在读取新建默认…","Loading defaults for new conversations…"],
-        "modelField": ["之后新建执行会话使用","Use for future execution conversations"],
+        "modelField": ["模型","Model"],
         "modelLabel": ["默认模型","Default model"],
-        "reasoning": ["推理选项","Reasoning options"],
+        "reasoning": ["思考强度","Reasoning effort"],
         "inheritModel": ["沿模型自身默认","Use model defaults"],
         "unsupportedSuffix": ["（当前不支持）"," (currently unsupported)"],
         "save": ["保存执行默认","Save execution defaults"],
@@ -1184,6 +1298,8 @@ const catalog = {
       },
       "savedRevisionPrefix": ["当前已保存（修订","Currently saved (revision "],
       "instructions": {
+        "readUnavailable": ["暂时无法读取{value}指令，请稍后重新读取。", "Could not load {value} instructions right now. Try reloading them later."],
+        "saveUnconfirmed": ["本次{value}指令保存结果尚未确认，当前输入已保留。请重新读取并核对已保存内容。", "The result of saving {value} instructions is unconfirmed. Your input is retained. Reload and check the saved content."],
         "timing": ["之后准备的请求会带上已保存要求；已经发出的请求不改写。","Requests prepared from now on will include the saved requirements. Requests already sent will not be rewritten."],
         "wrongScope": ["指令不属于当前项目或会话。","The instructions do not belong to the current project or conversation."],
         "readFailed": ["{value}指令读取失败：","Failed to load {value} instructions: "],
@@ -1192,30 +1308,32 @@ const catalog = {
         "clearedPrefix": ["已清空","Cleared"],
         "conversationPersistent": ["本会话持续指令","persistent instructions for this conversation"],
         "submittedSaved": ["提交的{value}指令已保存；之后输入的正文仍未保存。","The submitted {value} instructions were saved. Text entered afterward is still unsaved."],
-        "conversationTitle": ["这个会话的持续指令","Persistent instructions for this conversation"],
+        "conversationTitle": ["会话指令","Conversation instructions"],
         "conversationLabel": ["单会话持续指令","Instructions for a single conversation"],
-        "projectDescription": ["补充本项目主会话与全部执行会话共同使用的要求。","Add requirements shared by this project’s main conversation and all execution conversations."],
+        "projectDescription": ["介绍项目用途、目标，以及主会话与执行会话共同遵守的要求。","Describe the project’s purpose, goals, and requirements shared by its main and execution conversations."],
         "conversationDescription": ["补充「{value}」的具体分工和要求。","Add specific responsibilities and requirements for “{value}”."],
-        "editShared": ["编辑共同要求","Edit shared requirements"],
+        "editShared": ["编辑项目说明与要求","Edit project description and requirements"],
         "editConversation": ["编辑会话指令","Edit conversation instructions"],
         "savedLabel": ["当前已保存的{value}指令","Currently saved {value} instructions"],
-        "projectEmpty": ["当前没有保存本项目共同要求。","No shared requirements are currently saved for this project."],
+        "projectEmpty": ["当前没有保存项目说明与要求。","No project description and requirements are currently saved."],
         "conversationEmpty": ["这个会话当前没有保存单独指令。","No separate instructions are currently saved for this conversation."],
         "textNotLoaded": ["当前正文尚未取得。","The current text has not been retrieved yet."],
-        "projectField": ["本项目指令","Instructions for this project"],
+        "projectField": projectInstructionsCopy,
         "conversationField": ["本会话指令","Instructions for this conversation"],
-        "saveProject": ["保存项目指令","Save project instructions"],
+        "saveProject": ["保存项目说明与要求","Save project description and requirements"],
         "saveConversation": ["保存会话指令","Save conversation instructions"],
         "clearSave": ["清空并保存","Clear and save"],
-        "reloadProject": ["重新读取项目指令","Reload project instructions"],
+        "reloadProject": ["重新读取项目说明与要求","Reload project description and requirements"],
         "reloadConversation": ["重新读取会话指令","Reload conversation instructions"],
         "scopeTitle": ["作用范围与生效方式","Scope and when changes apply"],
-        "scopeHelp": ["项目和单会话指令补充项目要求与具体分工；通用职责、边界和工作标准由产品内置，不能在这里覆盖。单会话指令只作用于所选会话，与项目指令共同使用。清空只移除用户补充要求，内置职责继续生效；编辑不会改变真实会话身份或工具许可。","Project and individual conversation instructions add project requirements and specific responsibilities. General responsibilities, boundaries, and working standards are built into the product and cannot be overridden here. Individual conversation instructions apply only to the selected conversation and are used together with project instructions. Clearing removes only user-added requirements; built-in responsibilities continue to apply. Editing does not change the actual conversation identity or tool permissions."],
+        "scopeHelp": ["项目要求与所选会话指令共同生效。内置职责、边界和工作标准不能覆盖；清空仅移除用户补充，不改变会话身份或工具许可。","Project requirements and the selected conversation’s instructions apply together. Built-in responsibilities, boundaries and standards cannot be overridden. Clearing removes only your additions; conversation identity and tool permissions are unchanged."],
         "noModelStart": ["保存、替换和清空不会启动模型或发送消息。","Saving, replacing, and clearing do not start a model or send messages. "]
       },
       "metadataUnconfirmed": ["保存结果未确认，内容可能已更新；当前输入已保留，请刷新核实后再决定是否保存。","Save result unconfirmed; the content may have changed. Your input is retained. Refresh and verify before deciding whether to save again."]
     },
     "panel": {
+      "sourceOpenFailed": ["暂时无法打开这条来源，请稍后重试。", "This source could not be opened right now. Try again later."],
+      "returnConversationFailed": ["暂时无法返回原会话。当前阅读内容仍保留，请稍后重试。", "The original conversation could not be reopened right now. Your current reading is still available. Try again later."],
       "connectingConversation": ["正在接入项目会话…","Connecting the project session…"],
       "conversationConnectionUnavailable": ["当前无法接入项目会话","The project conversation is unavailable"],
       "conversationConnectionRecovery": ["此处暂时无法输入。请保留未发送的内容，再返回项目列表重新打开；这不会自动重放或续跑任务。","Input is unavailable here. Keep any unsent content, then return to the project list and reopen the project. Tasks will not be replayed or resumed automatically."],
@@ -1267,7 +1385,24 @@ const catalog = {
       "originalPanelLeft": ["原项目面板已离开。","The original project panel is no longer active."]
     },
     "schedule": {
+      "oneTimeDelayDurationSummary": ["延后一次：{amount} {unit}（{timeZone}）","One-time delay: {amount} {unit} ({timeZone})"],
+      "fixedIntervalDurationSummary": ["固定间隔：每 {amount} {unit}（{timeZone}）","Fixed interval: every {amount} {unit} ({timeZone})"],
+      "delayAmount": ["延迟时长","Delay"],
+      "intervalAmount": ["重复间隔","Interval"],
+      "durationUnit": ["单位","Unit"],
+      "durationSeconds": ["秒","Seconds"],
+      "durationMinutes": ["分钟","Minutes"],
+      "durationHours": ["小时","Hours"],
+      "durationDays": ["天","Days"],
       "returnedProjectMismatch": ["返回的计划不属于当前项目。","The returned schedule does not belong to the current project."],
+      "invalidCron": ["Cron表达式的字段或取值无效。请使用五段表达式：分、时、日、月、星期；可用数字、*、范围、步长和逗号列表。", "The Cron fields or values are invalid. Use five fields: minute, hour, day of month, month, and day of week; numbers, *, ranges, steps, and comma-separated lists are supported."],
+      "invalidTimeZone": ["请输入UTC或有效的IANA时区，例如Asia/Taipei。", "Enter UTC or a valid IANA time zone, such as Asia/Taipei."],
+      "invalidDateTime": ["请输入所选时区内实际存在的日期和时间。", "Enter a date and time that exists in the selected time zone."],
+      "futureDateRequired": ["日期和时间必须晚于当前时间。", "The date and time must be later than the current time."],
+      "noNextTime": ["该规则没有可表示的下次执行时间，请调整日期或规则。", "This rule has no representable next execution time. Adjust the date or rule."],
+      "minimumInterval": ["固定间隔至少为60秒。", "The fixed interval must be at least 60 seconds."],
+      "invalidTitle": ["请输入有效的计划标题，最多120个字符。", "Enter a valid schedule title, up to 120 characters."],
+      "invalidRule": ["执行规则无效，请检查此处的输入。", "The execution rule is invalid. Check this input."],
       "operationUnconfirmedPrefix": ["操作结果未确认：","Operation result unconfirmed: "],
       "verifySettingsSuffix": ["。请刷新设置并打开原会话核实。",". Refresh the settings and open the original session to verify."],
       "settingsSaved": ["设置已保存。","Settings saved."],
@@ -1296,9 +1431,9 @@ const catalog = {
       "removed": ["已移除的计划","Removed schedule"],
       "select": ["选择一条计划","Select a schedule"],
       "belongsToPrefix": ["所属：","Belongs to: "],
-      "removedExplanation": ["这条计划的设置已移除，不能再按旧设置触发。已有运行记录仍归原会话。","This schedule's settings have been removed, so it can no longer trigger with the old settings. Existing run records remain with the original session."],
+      "removedExplanation": ["计划设置已移除，不再按旧设置触发；原会话的运行记录保留。","Schedule settings removed; they no longer trigger. Run records remain with the original conversation."],
       "futureArrangements": ["以后安排","Future schedule"],
-      "disableEffects": ["停用会调整尚未开始的对应输入；已经开始的本轮由原会话 Stop 控制。实际调整结果以操作回执为准。","Disabling adjusts the corresponding inputs that have not started. Use Stop in the original session to control a turn that has already started. See the operation receipt for the actual adjustments."],
+      "disableEffects": ["停用仅调整尚未开始的对应输入，结果见操作回执；已开始的本轮请在原会话停止。","Disabling adjusts only corresponding inputs that have not started; see the operation receipt. Use Stop in the original conversation for an active turn."],
       "taskContent": ["任务内容","Task content"],
       "sourcesAndUpdates": ["设置来源与更新时间","Settings sources and update times"],
       "createdAtPrefix": ["创建于","Created at "],
@@ -1323,14 +1458,14 @@ const catalog = {
       "allSessions": ["全部会话","All sessions"],
       "automaticStatus": ["自动执行状态","Automatic execution status"],
       "requirements": ["运行条件","Run requirements"],
-      "requirementsDescription": ["到点需本机唤醒、DSH 与本地服务可用、模型与工具可用，且项目和目标会话未归档。设置已启用不代表到点一定成功。","At the scheduled time, this computer must be awake, DSH and the local service must be available, the model and tools must be available, and the project and target session must not be archived. Enabling the settings does not guarantee success at the scheduled time."],
-      "retryPolicy": ["错过的计划不自动补跑；失败不自动重试。已经开始准备但尚未结束的同一次触发沿原记录继续，不新建一次运行。","Missed runs are not automatically made up, and failures are not automatically retried. A trigger that has begun preparation but has not finished continues under its original record, without creating another run."],
-      "archivedProjectEffects": ["项目已归档，仍可保存定时任务的内容、规则和启停；保存不会启动工作。归档期间不能“现在运行”。恢复后只等待未来计划，不补跑。","The project is archived. You can still save scheduled task content, rules, and enabled or disabled settings; saving does not start work. Run now is unavailable while archived. After restoration, only future schedules are awaited; missed runs are not made up."],
+      "requirementsDescription": ["自动执行需本机唤醒，DSH、本地服务、模型和工具可用，项目与目标会话未归档；启用不保证运行成功。","Automatic runs need an awake computer, available DSH, local service, model, and tools, and an unarchived project and target conversation. Enabling does not guarantee success."],
+      "retryPolicy": ["错过不补跑，失败不自动重试；准备未结束的同一次触发沿原记录继续，不新建运行。","Missed runs are not made up; failures are not retried automatically. An unfinished trigger continues preparation under its original record without creating a new run."],
+      "archivedProjectEffects": ["项目已归档，仍可编辑、保存和启停计划；“现在运行”不可用，恢复后仅触发未来计划，不补跑。","Project archived. Schedules remain editable and can be saved, enabled, or disabled. Run now is unavailable. After restoration, only future schedules can trigger; missed runs are not made up."],
       "noRunsShort": ["尚无运行记录","No run records yet"],
       "noSchedules": ["这个会话尚无定时计划。","This session has no schedules yet."],
       "removedHistoryPrefix": ["已移除设置的运行历史（","Run history for removed settings ("],
       "originalSessionUnavailable": ["原会话当前不可用","The original session is currently unavailable"],
-      "archivedTriggerEffects": ["当前不触发；归档前的启停设置保留。恢复后只等待未来计划，不重放旧工作。","No triggers while archived; the enabled or disabled setting from before archiving is retained. After restoration, only future schedules are awaited; old work is not replayed."],
+      "archivedTriggerEffects": ["归档期间不触发，启停设置保留；恢复后仅触发未来计划。","No triggers while archived; enabled/disabled settings are retained. Only future schedules can trigger after restoration."],
       "sessionTriggerUnconfirmed": ["所属会话当前不可用，不能确认未来触发。","The associated session is currently unavailable; future triggers cannot be confirmed."],
       "futureTriggersDisabled": ["未来触发已停用。","Future triggers are disabled."],
       "nextRun": ["下次计划","Next scheduled run"],
@@ -1339,7 +1474,7 @@ const catalog = {
       "noFutureTimesShort": ["已无后续时间","No future times remain"],
       "nextRunPreview": ["下次计划（预览）","Next scheduled run (preview)"],
       "nextTimeNotReturned": ["服务未返回下次未来时间。","The service did not return the next future time."],
-      "oneTimeExpired": ["这条单次计划的计划时刻已过；不自动补跑，实际是否运行请查看运行记录。","The time for this one-time schedule has passed. It will not be run automatically to catch up. Check the run records to see whether it ran."],
+      "oneTimeExpired": ["单次计划已过期，不自动补跑；是否运行请查看记录。","One-time schedule expired; no automatic catch-up run. Check the run records to see whether it ran."],
       "noFutureTimes": ["这条计划已无后续时间。","This schedule has no future times remaining."],
       "enabled": ["已启用","Enabled"],
       "disabled": ["已停用","Disabled"],
@@ -1349,18 +1484,18 @@ const catalog = {
       "inputMessage": ["输入消息","input message"],
       "toolCall": ["工具调用","tool call"],
       "openOriginalSession": ["打开原会话","Open original session"],
-      "noDirectRunSource": ["本次记录未提供可直接定位的消息或工具来源，请查看原会话。","This record does not provide a message or tool source that can be located directly. Check the original session."],
+      "noDirectRunSource": ["无可直接定位的消息或工具来源，请查看原会话。","No directly locatable message or tool source; open the original conversation."],
       "admissionReceipt": ["本次请求接纳回执","Request admission receipt"],
-      "admissionReceiptDescription": ["以下为提交当时的接纳与保存结果；当前处理情况请查看运行记录。","These are the admission and save results at submission time. Check the run records for current progress."],
+      "admissionReceiptDescription": ["提交时的接纳与保存结果；当前进度见运行记录。","Admission and save results at submission time. See run records for current progress."],
       "runLinkSavedPrefix": ["提交时运行关联的保存：","Run link saved at submission: "],
       "sessionInputSavedFragment": ["；原会话输入的保存：","; original session input saved: "],
       "requestTimePrefix": ["请求时间：","Request time: "],
-      "taskOutcomeUnconfirmed": ["任务结果尚未确认，请在原会话查看执行过程与成果。","The task outcome is not yet confirmed. Check the original session for execution progress and results."],
+      "taskOutcomeUnconfirmed": ["任务结果未确认；请到原会话查看过程与成果。","Task outcome unconfirmed; check progress and results in the original conversation."],
       "manualRun": ["手动运行","Manual run"],
       "automaticSchedule": ["自动计划","Automatic schedule"],
       "runLinksAndStatus": ["运行关联与状态","Run links and status"],
-      "noRuns": ["尚无运行记录。保存计划不代表已经运行。","No run records yet. Saving a schedule does not mean it has run."],
-      "runHistoryExplanation": ["排队、处理或本轮结束都不能单独说明任务达成；已有记录不会因移除设置而删除。","Queuing, processing, or the end of a turn alone does not confirm task success. Removing the settings does not delete existing records."],
+      "noRuns": ["尚无运行记录。","No run records yet."],
+      "runHistoryExplanation": ["排队、处理中或本轮结束不等于任务达成；移除计划仍保留运行记录。","Queued, processing, or turn ended does not confirm task success. Run records remain after schedule removal."],
       "unstartedInputCancelled": ["尚未开始的输入已取消","Input that had not started was cancelled"],
       "turnEnded": ["本轮已结束；任务结果请查看原会话","This turn has ended; check the original session for the task outcome"],
       "originalTargetUnavailable": ["原目标当前不可用","The original target is currently unavailable"],
@@ -1370,7 +1505,7 @@ const catalog = {
       "name": ["计划名称","Schedule name"],
       "taskForOriginalSession": ["送给原会话的任务内容","Task content to send to the original session"],
       "enableFutureTriggers": ["启用未来触发","Enable future triggers"],
-      "editEffects": ["编辑影响尚未开始的对应输入；已经开始的本轮仍由原会话 Stop 控制。","Editing affects the corresponding inputs that have not started. A turn that has already started is still controlled by Stop in the original session."],
+      "editEffects": ["只调整尚未开始的对应输入；已开始的本轮请在原会话停止。","Edits adjust only corresponding inputs that have not started. Use Stop in the original conversation for an active turn."],
       "rules": ["计划规则","Schedule rules"],
       "executionRules": ["执行规则","Execution rules"],
       "ruleType": ["规则类型","Rule type"],
@@ -1417,7 +1552,7 @@ const catalog = {
       "pendingAdjustmentNotConnected": ["待执行输入调整尚未接通，不能确认排队内容已更新或取消。","Pending input adjustment is not connected yet. It cannot be confirmed whether queued content has been updated or cancelled."],
       "pendingChangesSaveUnconfirmed": ["待执行修改的保存尚未确认。","Saving changes to pending inputs is not yet confirmed."],
       "operationIncompletePrefix": ["操作未全部完成：","The operation was not fully completed: "],
-      "activeWorkUnaffected": ["当前已开始的工作不因此停止；自动执行状态请查看上方最近一次检查。","Work that has already started does not stop as a result. See the latest check above for automatic execution status."],
+      "activeWorkUnaffected": ["此操作不会停止已开始的工作；自动执行状态见最近检查。","This operation does not stop active work. See the latest check for automatic execution status."],
       "changedAtSubmission": ["提交时计划已变化，本次未按旧内容运行。","The schedule had changed at submission time. This request did not run with the old content."],
       "enqueueConfirmedAtSubmission": ["提交时已确认本次请求入队。","This request was confirmed queued at submission time."],
       "notEnqueuedAtSubmission": ["提交时本次请求未入队。","This request was not queued at submission time."],
@@ -1455,6 +1590,8 @@ const catalog = {
       "sunday": ["周日","Sun"]
     },
     "usage": {
+      "costNotProvided": ["费用未提供","Cost not provided"],
+      "incompleteReports": ["仅含已报告部分；缺报用量未知。","Reported usage only; missing usage is unknown."],
       "projectMismatch": ["返回的用量不属于当前项目。","The returned usage does not belong to this project."],
       "readUnavailable": ["用量暂时无法读取，请刷新重试。未读取的数据不会按零展示。","Usage cannot be read right now. Refresh to retry. Unread data will not be shown as zero."],
       "invalidTimeRange": ["请选择有效时间范围，结束时间须晚于开始时间。","Choose a valid time range. The end must be later than the start."],
@@ -1473,12 +1610,12 @@ const catalog = {
       "unknown": ["用量未知","Usage unknown"],
       "partiallyAvailable": ["部分用量可得","Some usage available"],
       "reported": ["已报告用量","Reported usage"],
-      "scopePrefix": ["统计范围：","Scope: "],
+      "scopePrefix": ["当前范围：","Current scope: "],
       "selectedSession": ["所选会话","Selected session"],
-      "projectSources": ["项目归属来源","Sources attributed to the project"],
+      "projectSources": ["整个项目","Entire project"],
       "selectedModel": ["所选模型","Selected model"],
       "rangeTo": ["至"," to "],
-      "endExclusiveSuffix": ["（结束不包含）。"," (end exclusive)."],
+      "endExclusiveSuffix": ["（不含结束时刻）"," (end exclusive)"],
       "readCountPrefix": ["已读取","Read "],
       "nativeSourcesReportedTurns": ["个原生来源； 有已报告用量"," native sources; usage reported for "],
       "reportedTurnsMissingTurns": ["轮；仍有缺报"," turns; reports still missing for "],
@@ -1491,7 +1628,7 @@ const catalog = {
       "noAttributableEndTime": ["暂无可归属的结束时间","No attributable end time available"],
       "timeRange": ["{value} 至 {value1}","{value} to {value1}"],
       "costUnknown": ["费用：未知。","Cost: unknown."],
-      "bySessionSource": ["按会话来源","By session source"],
+      "bySessionSource": ["按会话","By conversation"],
       "byRequestSource": ["按请求来源","By request source"],
       "byModel": ["按模型","By model"],
       "byUtcDate": ["按日期（UTC）","By date (UTC)"],

@@ -142,6 +142,7 @@ export function installProjectProductUi(ctx: Context, ports: ProjectProductUiPor
       return result.value
     }
     const communication: ProjectProductCommunicationPorts = Object.freeze<ProjectCommunicationInjected>({
+      beginNavigation: actions.beginNavigation,
       openTarget, openCommunicationFile: ports.openCommunicationFile, resolveCommunicationInvocation: ports.resolveCommunicationInvocation, subscribeCommunicationChanges: ports.subscribeCommunicationChanges,
       readCommunication: (request, signal) => unwrap(ports.remote.readCommunication(request, signal)),
       resolveCommunicationNavigation: (request, signal) => unwrap(ports.remote.resolveCommunicationNavigation(request, signal)),

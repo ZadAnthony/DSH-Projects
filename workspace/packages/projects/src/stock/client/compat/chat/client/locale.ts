@@ -403,12 +403,30 @@ export const statusZh = {
   plan: '等待你审阅计划',
   approval: '等待你确认许可',
   elapsed: '{status} · 本轮已用时 {duration}',
+  'failure.failedTurn': '第 {turn} 轮运行失败',
+  'failure.stoppedTurn': '第 {turn} 轮已停止',
+  'failure.occurredAt': '发生于 {time}',
+  'failure.timeUnknown': '未知时间',
+  'failure.details': '技术详情',
+  'failure.originalMessage': '原始错误：',
+  'failure.code': '错误代码：',
+  'failure.attachmentMissing': '这次回复未完成：无法读取所需附件。',
+  'failure.unrecognized': '这次回复未完成，失败原因尚未识别。',
 }
 export const statusEn: Record<keyof typeof statusZh, string> = {
   answer: 'Waiting for your answer',
   plan: 'Waiting for your plan review',
   approval: 'Waiting for your permission decision',
   elapsed: '{status} · Turn elapsed {duration}',
+  'failure.failedTurn': 'Turn {turn} failed',
+  'failure.stoppedTurn': 'Turn {turn} stopped',
+  'failure.occurredAt': 'Occurred at {time}',
+  'failure.timeUnknown': 'unknown time',
+  'failure.details': 'Technical details',
+  'failure.originalMessage': 'Original error: ',
+  'failure.code': 'Error code: ',
+  'failure.attachmentMissing': 'This reply was not completed because a required attachment could not be read.',
+  'failure.unrecognized': 'This reply was not completed. The cause has not been identified.',
 }
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap {

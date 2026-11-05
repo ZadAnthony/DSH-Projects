@@ -3,6 +3,7 @@ import { ProjectSourceDeletion } from "./deletion-all.ts"
 import type { DeleteExecutionSessionRequest, DeleteProjectRequest, ProjectDeletionActionResult, RenameExecutionSessionRequest, RenameExecutionSessionResult } from "./public-types.ts"
 import type { ProjectTargetDeletionCut } from './deletion-v1.ts'
 import type { ProjectSourceDispositionSnapshot, ProjectsRuntimeComposition } from './stock/project-ports.ts'
+import { installMainDelegationPolicy } from './stock/main-delegation.ts'
 import { onProjectTurnSettled, onProjectCancelRequested, onProjectInboxClaimed } from './stock/request/harness.ts'
 import { ProjectExecutionLifecycle, LifecycleStoppedPersistenceError } from './lifecycle-runtime.ts'
 import { LifecycleOperationError, LifecycleBoundaryError } from './lifecycle-types.ts'
@@ -53,6 +54,7 @@ import {
   projectDetail,
   projectRecord,
   projectSessionRecord,
+  projectSessionReplyReference,
 } from './project-context.ts'
 import {
   installProjectTools, installProjectHistoryTools,
@@ -944,14 +946,17 @@ export class ProjectsRuntime implements ProjectToolRuntime {
     const nativeSource = source === undefined
       ? undefined
       : await this.readSourceForProject(current.snapshot, source, exec.signal)
+    const detail = this.projectDetail(current.snapshot)
     return asJson({
-      ...this.projectDetail(current.snapshot),
+      ...detail,
+      sessions: detail.sessions.map(session => ({ ...session, ...projectSessionReplyReference(session) })),
       overview: await this.features.overview({ kind: 'session', sessionId: current.membership.session.id,
         role: current.membership.session.role }).readContext({ projectId: current.snapshot.project.id }),
       targets: [projectTarget(current.membership.session)],
       currentSession: {
         id: current.membership.session.id,
         role: current.membership.session.role,
+        ...projectSessionReplyReference(current.membership.session),
       },
       invocationInputs: current.inputs,
       ...(nativeSource === undefined ? {} : { source: nativeSource,
@@ -970,7 +975,7 @@ export class ProjectsRuntime implements ProjectToolRuntime {
   async queryHistory(request: QueryProjectHistoryRequest, signal: AbortSignal): Promise<ProjectHistorySearchResult> {
     this.assertReady()
     const { projectId, ...query } = request
-    return this.historyReader.search(projectId, query, signal)
+    return this.historyReader.search(projectId, query, signal, undefined, { displaySummary: true })
   }
 
   async readHistory(request: ReadProjectHistoryRequest, signal: AbortSignal): Promise<ProjectHistoryReadResult> {
@@ -1084,7 +1089,7 @@ export class ProjectsRuntime implements ProjectToolRuntime {
     if (args.instructions !== undefined && typeof args.instructions !== 'string') throw communicationError('COMMUNICATION_ARGUMENTS_INVALID', 'instructions must be a complete string, including an explicit empty value')
     const created = await this.acceptProjectOperation(current.snapshot.project.id, () =>
       this.options.creation!.createExecution(current.snapshot.project, title, args.instructions, exec.signal))
-    return asJson({ projectId: current.snapshot.project.id, creation: 'created', target: projectSessionRecord(created.session), targets: [projectTarget(created.session)], modelStarted: false,
+    return asJson({ projectId: current.snapshot.project.id, creation: 'created', target: { ...projectSessionRecord(created.session), ...projectSessionReplyReference(created.session) }, targets: [projectTarget(created.session)], modelStarted: false,
       ...(created.warning === undefined ? {} : { error: created.warning }) })
   }
 
@@ -1384,6 +1389,7 @@ export class ProjectsRuntime implements ProjectToolRuntime {
     this.installedScopes.add(agent)
     this.installedScopeModes.set(agent, prepared ? 'prepared' : 'current')
     const disposers: Array<() => unknown> = []
+    if (membership.session.role === 'main') disposers.push(installMainDelegationPolicy(agent))
     const recording = this.options.originalRecording ?? { streamCheckpointBytes: 4096, streamCheckpointIntervalMs: 1000 }
     if (!Number.isSafeInteger(recording.streamCheckpointBytes) || recording.streamCheckpointBytes < 1
       || !Number.isSafeInteger(recording.streamCheckpointIntervalMs) || recording.streamCheckpointIntervalMs < 1) {

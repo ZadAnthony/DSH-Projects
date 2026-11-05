@@ -2,6 +2,12 @@
 import type { Delivery, Project, ProjectSession, ProjectSessionCarrier, ProjectSnapshot, ProjectWorkSessionRole } from './records-types.ts'
 import type { ProjectDeliveryRecord, ProjectDetail, ProjectInvocationInput, ProjectRecord, ProjectSessionRecord } from './public-types.ts'
 import type { OverviewContext } from './features/overview/contract.ts'
+import { makeReplySessionLink, makeReplySessionMention } from './reply-session-links.ts'
+
+/** Model-facing copyable references, projected from the same real logical record. */
+export function projectSessionReplyReference(session: Pick<ProjectSessionRecord, 'id' | 'projectId' | 'title'>): { link: string; mention: string } {
+  return { link: makeReplySessionLink(session.projectId, session.id), mention: makeReplySessionMention(session.projectId, session.id, session.title) }
+}
 
 /** The same committed snapshot decides both the identity body and its source status. */
 export function projectIdentityAvailable(snapshot: ProjectSnapshot | undefined, session: ProjectSession): boolean {
@@ -62,7 +68,7 @@ export function projectIdentityContext(
     ...(identity.session.role === 'main' ? { mainHistory: mainHistoryIdentity(snapshot, identity.session) } : {}),
     sessions: snapshot.sessions.filter(isWorkSession)
       .filter(item => item.sourceLifecycle.kind === 'available').sort((a, b) => a.id.localeCompare(b.id))
-      .map(item => ({ id: item.id, hostSessionId: item.hostSessionId, role: item.role, title: item.title })) }),
+      .map(item => ({ id: item.id, hostSessionId: item.hostSessionId, role: item.role, title: item.title, ...projectSessionReplyReference(item) })) }),
   ].join('\n')
 }
 
