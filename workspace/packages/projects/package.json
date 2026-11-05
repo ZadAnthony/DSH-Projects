@@ -1,6 +1,6 @@
 {
   "name": "dsh-projects-zad",
-  "version": "0.1.0-beta.2",
+  "version": "0.1.0-beta.3",
   "private": false,
   "type": "module",
   "engines": {
@@ -223,9 +223,6 @@
   "devDependencies": {
     "@google/genai": "2.21.0"
   },
-  "license": "MIT",
-  "author": "DSH Projects contributors",
-  "description": "Project collaboration, conversation continuity, records and shared memory for DeepSeek Harness.",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/ZadAnthony/DSH-Projects.git",
@@ -246,5 +243,8 @@
     "access": "public",
     "registry": "https://registry.npmjs.org/",
     "tag": "latest"
-  }
+  },
+  "license": "MIT",
+  "author": "DSH Projects contributors",
+  "description": "Project collaboration, conversation continuity, records and shared memory for DeepSeek Harness."
 }
