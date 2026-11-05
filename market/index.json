@@ -1,0 +1,39 @@
+{
+  "format": 1,
+  "title": "DSH Projects项目索引",
+  "description": "由 DSH Projects 项目维护，仅提供本项目插件。",
+  "plugins": [
+    {
+      "name": "dsh-projects-zad",
+      "title": "DSH Projects",
+      "description": "Project collaboration, conversation continuity, records and shared memory for DeepSeek Harness.",
+      "author": "DSH Projects contributors",
+      "homepage": "https://github.com/ZadAnthony/DSH-Projects#readme",
+      "repository": {
+        "url": "https://github.com/ZadAnthony/DSH-Projects",
+        "directory": "workspace/packages/projects"
+      },
+      "metadata": {
+        "keywords": [
+          "dsh-plugin",
+          "deepseek-harness",
+          "projects",
+          "memory",
+          "workflow"
+        ]
+      },
+      "versions": [
+        {
+          "version": "0.1.0-beta.3",
+          "publishTimestamp": 1793872776,
+          "source": {
+            "type": "npm"
+          },
+          "engines": {
+            "dsh": "0.2.1-rc.3 || 0.2.1-rc.5"
+          }
+        }
+      ]
+    }
+  ]
+}
