@@ -1,7 +1,7 @@
 {
-  "name": "@local/dsh-projects",
+  "name": "dsh-projects-zad",
   "version": "0.1.0-beta.2",
-  "private": true,
+  "private": false,
   "type": "module",
   "engines": {
     "dsh": "0.2.1-rc.3 || 0.2.1-rc.5"
@@ -225,5 +225,26 @@
   },
   "license": "MIT",
   "author": "DSH Projects contributors",
-  "description": "Project collaboration, conversation continuity, records and shared memory for DeepSeek Harness."
+  "description": "Project collaboration, conversation continuity, records and shared memory for DeepSeek Harness.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ZadAnthony/DSH-Projects.git",
+    "directory": "workspace/packages/projects"
+  },
+  "homepage": "https://github.com/ZadAnthony/DSH-Projects#readme",
+  "bugs": {
+    "url": "https://github.com/ZadAnthony/DSH-Projects/issues"
+  },
+  "keywords": [
+    "dsh-plugin",
+    "deepseek-harness",
+    "projects",
+    "memory",
+    "workflow"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/",
+    "tag": "latest"
+  }
 }

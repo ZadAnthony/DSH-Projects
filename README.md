@@ -11,7 +11,7 @@ DeepSeek Harness 的本地项目协作插件，将多会话协作、长期上下
 
 项目同时提供整体看板、资料与成果入口、会话定时任务及用量查看。用户决定方向、范围和重要取舍，Agent 按委托组织与执行工作。
 
-![示例项目中的共享记忆](assets/shared-memory.jpg)
+![示例项目中的共享记忆](https://raw.githubusercontent.com/ZadAnthony/DSH-Projects/main/assets/shared-memory.jpg)
 
 图中内容为手动录入的示例，展示共享记忆的保存与回读。
 
@@ -23,20 +23,28 @@ DeepSeek Harness 的本地项目协作插件，将多会话协作、长期上下
 
 ## 安装
 
-安装包及 SHA-256 校验值见 [Releases](https://github.com/ZadAnthony/DSH-Projects/releases/tag/v0.1.0-beta.2)。插件运行时包名为 `@local/dsh-projects`。当前分发形式为预构建安装包，暂不提供 npm 安装或仓库源码链接直装。
+插件包名为 `dsh-projects-zad`，提供 npm 和 GitHub Release 两种预编译安装包。准确版本及 SHA-256 校验值见 [Releases](https://github.com/ZadAnthony/DSH-Projects/releases/tag/v0.1.0-beta.2)，仓库源码链接不作直接安装入口。
 
-**Desktop**：在 DSH `0.2.1-rc.5` App 中打开 **插件 → 添加插件 → 安装第三方插件**，粘贴以下公开安装包 URL；安装后点击 **立即启用**。正常退出并重开 App，在插件详情核对 `0.1.0-beta.2`、安装来源与运行状态。
+**在 DSH「发现」页安装**：在 DSH `0.2.1-rc.5` 的 **插件 → 实验性插件 → 更多** 中启用 **自定义插件市场**，进入 **发现 → 添加索引源**，填入下面的项目索引地址，再搜索 **DSH Projects** 并确认安装。该索引由本项目维护，只列出本插件。
+
+```text
+https://raw.githubusercontent.com/ZadAnthony/DSH-Projects/main/market/index.json
+```
+
+DSH 默认没有配置目录，启用功能后仍需添加索引源。已有社区目录的收录和同步由该目录维护者负责；项目索引可以直接使用。发现页及安装行为见 [DSH 官方说明](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.1-rc.5/docs/user/guide/plugin-market.zh.md)。
+
+**Desktop 直接安装**：在 DSH `0.2.1-rc.5` App 中打开 **插件 → 添加插件 → 安装第三方插件**，填写 `dsh-projects-zad@0.1.0-beta.2`，或粘贴以下 GitHub 安装包 URL；安装后点击 **立即启用**。正常退出并重开 App，在插件详情核对包名、`0.1.0-beta.2`、安装来源与运行状态。
 
 ```text
 https://github.com/ZadAnthony/DSH-Projects/releases/download/v0.1.0-beta.2/dsh-projects-0.1.0-beta.2.tgz
 ```
 
-已有旧版时，先备份资料，再按管理器提示卸载旧插件并安装新版；正常卸载保留 Projects 数据和既有配置。若安装本地 `.tgz` 提示无法读取或 `EPERM`，可改用上述公开安装包 URL。
+**从旧包升级**：早期版本使用 `@local/dsh-projects`，与新包是不同的安装身份。先正常停止相关任务、退出宿主并备份资料，再沿正常管理器卸载旧包、安装新版，避免同时启用两者。正常卸载保留 Projects 数据；继续使用原 `dataRoot`，项目 ID 与存储格式不变。按 `id: dsh-projects` 保存的配置继续沿用；自定义 patch 若显式写了旧模块名 `@local/dsh-projects`，需同步改为 `dsh-projects-zad`。不要删除资料目录。
 
-**Web**：下载 [dsh-projects-0.1.0-beta.2.tgz](https://github.com/ZadAnthony/DSH-Projects/releases/download/v0.1.0-beta.2/dsh-projects-0.1.0-beta.2.tgz)，准备 Node.js 24 和可在终端运行的 `pnpm`。先正常停止已有 Web 服务，再在安装包所在目录运行：
+**Web**：准备 Node.js 24 和可在终端运行的 `pnpm`，先正常停止已有 Web 服务，再运行：
 
 ```sh
-npx --yes @deepseek-ai/dsh@0.2.1-rc.5 plugin --profile web add ./dsh-projects-0.1.0-beta.2.tgz
+npx --yes @deepseek-ai/dsh@0.2.1-rc.5 plugin --profile web add dsh-projects-zad@0.1.0-beta.2
 npx --yes @deepseek-ai/dsh@0.2.1-rc.5 web
 ```
 
@@ -77,8 +85,8 @@ npx --yes @deepseek-ai/dsh@0.2.1-rc.5 web
 
 ## 开发与反馈
 
-源码构建、依赖准备和检查步骤见 [BUILDING.md](BUILDING.md)。安装预构建包不需要本仓库源码或 SDK。
+源码构建、依赖准备和检查步骤见 [BUILDING.md](https://github.com/ZadAnthony/DSH-Projects/blob/main/BUILDING.md)。安装预构建包不需要本仓库源码或 SDK。
 
 通过 [Issues](https://github.com/ZadAnthony/DSH-Projects/issues) 反馈问题。请提供插件版本、DSH 版本、操作系统与架构、Web／Desktop、复现步骤和实际结果；日志与截图请先移除密钥及私人资料。
 
-项目代码采用 [MIT License](LICENSE)。复用源码及依赖的许可和来源见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+项目代码采用 [MIT License](https://github.com/ZadAnthony/DSH-Projects/blob/main/LICENSE)。复用源码及依赖的许可和来源见 [THIRD_PARTY_NOTICES.md](https://github.com/ZadAnthony/DSH-Projects/blob/main/THIRD_PARTY_NOTICES.md)。

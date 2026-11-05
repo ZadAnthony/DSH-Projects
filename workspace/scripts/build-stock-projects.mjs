@@ -14,6 +14,9 @@ const repository = dirname(workspace)
 // Package prompts are canonical; reject an unsynchronized runtime projection.
 execFileSync(process.execPath, [resolve(repository, 'scripts/sync-agent-prompts.mjs'), '--check'], { stdio: 'inherit' })
 const original = JSON.parse(await readFile(resolve(workspace, 'packages/projects/package.json'), 'utf8'))
+// The manifest owns the installable package identity. Keep Cordis, Typert and
+// the browser factory aligned for both local archives and public npm packages.
+const packageName = original.name
 const stock = getStockRoot()
 const stockInputs = prepareStock(stock)
 const { build } = await import(pathToFileURL(stockModule('tsdown', stock)).href)
@@ -150,8 +153,10 @@ for (const name of required) {
   peers[name] = nativePeerRange(name, manifest.version)
 }
 const manifest = {
-  name: '@local/dsh-projects', version, private: true, type: 'module',
+  name: packageName, version, private: original.private, type: 'module',
   description: original.description, author: original.author, license: original.license,
+  repository: original.repository, homepage: original.homepage, bugs: original.bugs,
+  keywords: original.keywords, publishConfig: original.publishConfig,
   engines: { dsh: supportedDshRange },
   main: './lib/index.js', types: './lib/types/stock/index.d.ts',
   exports: {
@@ -163,7 +168,7 @@ const manifest = {
     './remote': { types: './lib/typert.remote-client.d.ts', default: './lib/typert.remote-client.js' },
     './package.json': './package.json',
   },
-  files: ['lib', 'cordis.patch.yml', 'NOTICE.md', 'LICENSE', 'THIRD_PARTY_NOTICES.md'],
+  files: ['lib', 'cordis.patch.yml', 'README.md', 'NOTICE.md', 'LICENSE', 'THIRD_PARTY_NOTICES.md'],
   dsh: {
     bundle: { patch: './cordis.patch.yml' },
     client: {
@@ -176,7 +181,8 @@ const manifest = {
   peerDependencies: peers, dependencies,
 }
 await writeFile(resolve(project, 'package.json'), JSON.stringify(manifest, null, 2) + '\n')
-await writeFile(resolve(project, 'cordis.patch.yml'), "- insert:\n    - id: dsh-projects\n      name: '@local/dsh-projects'\n      config:\n        dataRoot: !!js dshHomePath('projects-stock')\n")
+await writeFile(resolve(project, 'cordis.patch.yml'), `- insert:\n    - id: dsh-projects\n      name: ${JSON.stringify(packageName)}\n      config:\n        dataRoot: !!js dshHomePath('projects-stock')\n`)
+await cp(resolve(repository, 'README.md'), resolve(project, 'README.md'))
 await cp(resolve(repository, 'LICENSE'), resolve(project, 'LICENSE'))
 await cp(resolve(repository, 'THIRD_PARTY_NOTICES.md'), resolve(project, 'THIRD_PARTY_NOTICES.md'))
 const originalNotice = await readFile(resolve(workspace, 'packages/projects/NOTICE.md'), 'utf8')
@@ -260,10 +266,10 @@ try {
       { path: resolve(projected, 'tsconfig.host.json') }],
   }))
   const model = new WorkspaceAnalyzer({ root: stock, hostConfig: aggregatePath,
-    packages: ['@local/dsh-projects'], faces: ['host'] }).analyze()
+    packages: [packageName], faces: ['host'] }).analyze()
   const face = model.faces.find(value => value.face === 'host')
   if (!face) throw new Error('Projects stock Host is absent from the native Typert model')
-  const artifact = new FaceModelEmitter(face).emit('@local/dsh-projects')
+  const artifact = new FaceModelEmitter(face).emit(packageName)
   if (!artifact?.remote) throw new Error('Projects stock Host did not generate a native Remote contract')
   await mkdir(generated, { recursive: true })
   for (const [file, value] of Object.entries({
@@ -496,8 +502,8 @@ async function inlineCssUrls(source, file) {
   return output + source.slice(start)
 }
 function injectStyle(file, css, classes) {
-  const key = '@local/dsh-projects/' + relative(project, file)
-  return `const key=${JSON.stringify(key)};if(typeof document!=='undefined'&&!document.querySelector('style[data-plugin-css='+JSON.stringify(key)+']')){const style=document.createElement('style');style.dataset.plugin='@local/dsh-projects';style.dataset.pluginCss=key;style.textContent=${JSON.stringify(css)};document.head.appendChild(style)}\n`
+  const key = packageName + '/' + relative(project, file)
+  return `const key=${JSON.stringify(key)};if(typeof document!=='undefined'&&!document.querySelector('style[data-plugin-css='+JSON.stringify(key)+']')){const style=document.createElement('style');style.dataset.plugin=${JSON.stringify(packageName)};style.dataset.pluginCss=key;style.textContent=${JSON.stringify(css)};document.head.appendChild(style)}\n`
     + (classes === undefined ? 'export {};' : `export default ${JSON.stringify(classes)};`)
 }
 // Match the native ModuleLoader format: all stylesheet and small image assets
@@ -558,7 +564,7 @@ const client = await readFile(resolve(buildRoot, 'client/client.cjs'), 'utf8')
 const imports = [...client.matchAll(/require\(["']([^"']+)["']\)/g)].map(value => value[1])
 const undeclared = [...new Set(imports.filter(value => !external.includes(value)))]
 if (undeclared.length) throw new Error(`Undeclared browser modules: ${undeclared.join(', ')}`)
-await writeFile(resolve(generated, 'client.js'), `window.__ModuleLoader__.load({id:'@local/dsh-projects',factory(require){const module={exports:{}};const exports=module.exports;\n${client}\nreturn module.exports;}});\n`)
+await writeFile(resolve(generated, 'client.js'), `window.__ModuleLoader__.load({id:${JSON.stringify(packageName)},factory(require){const module={exports:{}};const exports=module.exports;\n${client}\nreturn module.exports;}});\n`)
 const clientBundledThirdParty = await writeBundledNotices(clientModules, 'notices/client-bundled', { runtime: 'lib/client.js' })
 await writeFile(resolve(project, 'NOTICE.md'), (await readFile(resolve(project, 'NOTICE.md'), 'utf8'))
   + '\nClient and Host bundles preserve original licenses, notices, package metadata and hashes for their actually inlined npm and SDK vendor inputs under lib/notices/client-bundled and lib/notices/host-bundled. Refer to each SOURCES.json for the exact package/version list.\n')
@@ -579,7 +585,7 @@ await hashSources(resolve(project, 'src'))
 const sourcesFile = `SOURCES-${version}.json`
 await writeFile(resolve(buildRoot, sourcesFile), JSON.stringify({ version, sourceHashes }, null, 2) + '\n')
 const report = {
-  version, stockCommit, selectedSdk: { version: stockInputs.version, commit: stockCommit },
+  name: packageName, version, stockCommit, selectedSdk: { version: stockInputs.version, commit: stockCommit },
   enginesDsh: supportedDshRange, tgz, sha256: createHash('sha256').update(await readFile(tgz)).digest('hex'),
   clientImports: [...new Set(imports)], pluginFiles: packed.files.map(value => value.path),
   cssInputs: [...new Set(cssInputs)], assetInputs: [...new Set(assetInputs)],
