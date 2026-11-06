@@ -57,12 +57,33 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select
   const { className, children, value, onValueChange, multiple, disabled, onFocus, onInvalid, ...nativeProps } = props;
   const native = useRef<HTMLSelectElement | null>(null);
   const trigger = useRef<HTMLButtonElement | null>(null);
+  const restoreNativeFocus = useRef<(() => void) | null>(null);
   const selectionId = useId();
   const [open, setOpen] = useState(false);
   const [options, setOptions] = useState<readonly Option[]>([]);
   const [items, setItems] = useState<readonly MenuEntry[]>([]);
   const attachNative = useCallback((element: HTMLSelectElement | null) => {
+    restoreNativeFocus.current?.();
+    restoreNativeFocus.current = null;
     native.current = element;
+    if (element !== null) {
+      const descriptor = Object.getOwnPropertyDescriptor(element, "focus");
+      const focus = element.focus;
+      // Keep a real select ref and its native focus event. The transient reveal
+      // is synchronous; the existing onFocus handler forwards to the host Button.
+      Object.defineProperty(element, "focus", { configurable: true, value(options?: FocusOptions) {
+        if (element.matches(":disabled")) return;
+        const hidden = element.hidden;
+        element.hidden = false;
+        try { focus.call(element, options); }
+        finally { element.hidden = hidden; }
+        trigger.current?.focus(options);
+      } });
+      restoreNativeFocus.current = () => {
+        if (descriptor === undefined) delete (element as { focus?: HTMLSelectElement["focus"] }).focus;
+        else Object.defineProperty(element, "focus", descriptor);
+      };
+    }
     setRef(forwardedRef, element);
   }, [forwardedRef]);
 
@@ -123,9 +144,10 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select
     props.onValueChange(option.value);
   };
 
+  // Keep native form semantics while letting the host Modal exclude this field from Tab traversal.
   return <span className={["projects-ui__select", className].filter(Boolean).join(" ")}>
     <select {...nativeProps} ref={attachNative} className="projects-ui__native-field"
-      value={value} multiple={multiple} disabled={disabled} tabIndex={-1} aria-hidden="true"
+      value={value} multiple={multiple} disabled={disabled} hidden tabIndex={-1} aria-hidden="true"
       onFocus={event => { onFocus?.(event); trigger.current?.focus(); }}
       onInvalid={event => {
         onInvalid?.(event);

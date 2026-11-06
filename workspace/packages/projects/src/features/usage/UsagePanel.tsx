@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import type {
   ProjectUsageActions, ProjectUsageQuery, ProjectUsageResult, UsageGroup, UsageMetric,
-  UsageMetricKey, UsageMetrics, UsageSession,
+  UsageMetricKey, UsageMetrics,
 } from './contract.ts'
-import { Button, EmptyState, ErrorState, Input, LoadingState, Select, Tooltip } from '../../client/ui/index.ts'
+import { Button, EmptyState, ErrorState, Input, LoadingState, Select } from '../../client/ui/index.ts'
 import { projectCopy, type ProjectsTranslate } from '../../client/ui/copy.ts'
 import { formatUiDate } from '../../client/ui/date-format.ts'
 
@@ -198,33 +198,6 @@ function UsageResult({ result, text }: { readonly result: ProjectUsageResult; re
     <GroupTable title={text("p5.usage.byModel")} columnTitle={text("p5.usage.model")} rows={result.models} text={text} />
     <GroupTable title={text("p5.usage.byUtcDate")} columnTitle={text("p5.usage.column.utcDate")} rows={result.periods} text={text} utcDates />
   </>
-}
-
-/** 会话标题可消费同一次查询的会话行，避免另造用量累计。 */
-export function UsageSessionSummary({ session, sessions, scope = 'current-query', loading = false, failed = false, translate }: {
-  readonly session?: UsageSession | undefined;
-  readonly sessions?: readonly UsageSession[] | undefined;
-  readonly scope?: 'current-query' | 'session-history';
-  readonly loading?: boolean;
-  readonly failed?: boolean;
-  readonly translate?: ProjectsTranslate;
-}): ReactNode {
-  const text = projectCopy(translate)
-  const rows = sessions ?? (session === undefined ? [] : [session])
-  if (rows.length === 0) return <span role="status" aria-busy={loading || undefined}>{text(loading
-    ? "p5.usage.loadingNative" : failed ? "p5.usage.readUnavailable" : "p5.usage.usageAndCostUnknown")}</span>
-  const metrics = rows.map(row => row.tokens.totalTokens)
-  const values = metrics.flatMap(metric => metric.reported === null ? [] : [metric.reported])
-  const total = values.reduce((sum, value) => sum + value, 0)
-  if (!Number.isSafeInteger(total)) throw new Error(text("p5.usage.totalOutOfRange"))
-  const metric: UsageMetric = {
-    reported: values.length === 0 ? null : total,
-    unknownTurns: metrics.reduce((sum, item) => sum + item.unknownTurns, 0),
-    unknownAuxiliaryRequests: metrics.reduce((sum, item) => sum + item.unknownAuxiliaryRequests, 0),
-    unknownSources: metrics.reduce((sum, item) => sum + item.unknownSources, 0),
-  }
-  return <Tooltip portal label={text("p5.usage.summaryTooltip", { value: scope === 'session-history' ? text("p5.usage.entireSessionHistory") : text("p5.usage.currentFilterScope"), value1: time(Math.max(...rows.map(row => row.observedAt)), text) })}><span aria-busy={loading || undefined}>{text("p5.usage.reportedTokensPrefix")}{formatUsageMetric(metric, text)}{' '}{text("p5.usage.costUnknownSuffix")}{loading
-    ? ` · ${text("p5.usage.summaryRefreshing")}` : failed ? text("p5.common.temporarilyUnreadableSuffix") : ''}</span></Tooltip>
 }
 
 const labels: Readonly<Record<UsageMetricKey, Parameters<ProjectsTranslate>[0]>> = {

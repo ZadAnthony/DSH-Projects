@@ -153,7 +153,7 @@ export class ProjectSubagentDomain {
       // One physical child has no carrier replacement. Native InputHub owns its complete transient draft.
       applyConversation(ctx, { maxConcurrentFileUploads: 2 })
     }
-    installProjectChat(ctx, { fileReader: options.fileReader, focusOwner: this.focusOwner, allowBranch: false,
+    installProjectChat(ctx, { fileReader: options.fileReader, focusOwner: this.focusOwner,
       renderCommunicationMessage: options.renderCommunicationMessage })
     applyTools(ctx); applyAttachments(ctx)
     if (!this.capture.readOnly) ctx.slots.inject('projects.subagent.live', () => ctx.slots.register({ name: 'projects.subagent.live' }, ContinuableBody))

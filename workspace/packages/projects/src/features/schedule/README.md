@@ -70,7 +70,7 @@ D17 的继续资格由真实 `prepare(target, start)` caller 在原 `resolveAgen
 
 模块测试位于 `tests/features/schedule`：原时间/来源控制、`mgmt-owner-{store,pending,service,native}.test.ts`、组件/五工具/controller。组合自验为 `tests/sched-mgmt1-runtime.test.ts`，D17 在 `tests/sched-d17-runtime.test.ts`。D17 使用真实 Session/Inbox/JSONL/ProjectsRuntime owner 与确定性模型、受控电源来源；实际 OS 与自然模型效果不在该验证内。相邻 INT1、C3/source、OWN-F1、普通 Stop 只选受影响控制。
 
-运行 schedule 组合 fixture 前必须显式给新的 `DSH_SCHEDULE_TEST_EVIDENCE=/tmp/<本轮新目录>`；reopen worker 继承同一目录并核对子路径。源码 owner 验法使用 `node .dev/dsh/node_modules/tsx/dist/cli.mjs --tsconfig .dev/dsh/tsconfig.base.json --test <目标测试>`，避免旧 `.bin` 的嵌入路径及混用 const enum 的 built/source 入口。
+从项目根运行 `npm run test:host -- workspace/packages/projects/tests/sched-mgmt1-runtime.test.ts`；统一入口使用固定 RC.5 并为本轮生成独立 evidence，reopen worker 继承同一目录并核对子路径。也可用 `DSH_SCHEDULE_TEST_EVIDENCE` 指定新的绝对目录。其它 Host、源码组件、编译客户端和成品入口见[当前测试说明](../../../tests/README.md)。
 
 旧 MGT 候选曾完成正常 native/Projects 生成、构建、打包、官方显式 offline 私有安装、当时的 GUI 和新 Host PID 自验；精确命令、原始失败、安装 byte identity 及未覆盖边界由原 HANDOFF/MGT 矩阵持有，不外推本轮新增功能的 GUI。当前统一包由总整合者正常再生、安装与取证，自验不裁 Pass，fresh integrated 核实由总开发安排。
 

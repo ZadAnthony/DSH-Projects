@@ -43,13 +43,13 @@ export function registerChatNodeRenderers(
   }
   const User = communication(UserMessageNodeView)
   const Context = communication(ContextMessageNodeView)
-  const Trigger = communication(TurnTriggerNodeView)
   const Assistant = (props: ComponentProps<typeof AssistantNodeView>) => createElement(AssistantNodeView, {
     ...props, replySessionLinkSource: options.replySessionLinkSource?.(props.sessionId),
   })
   // Projects-only copy stays in its own namespace, without widening the
   // native Chat locale contract shared with other plugins.
   const projectStatusText = ctx.locale.bind(STATUS_NS)
+  const Trigger = communication(props => createElement(TurnTriggerNodeView, { ...props, projectStatusText }))
   const TurnError = (props: ChatNodeViewProps<'turn-error'>) => createElement(TurnErrorNodeView, { ...props, projectStatusText })
   const TurnProcess = (props: ChatNodeViewProps<'turn-process'>) => createElement(TurnProcessNodeView, { ...props, projectStatusText })
 

@@ -220,10 +220,23 @@ function ReaderPane({ domain, detail, binding, source, focus, visible = true, tr
   const element = useRef<HTMLDivElement>(null)
   const navigation = useProjectReplyLinksNavigation()
   const latestNavigation = useRef(navigation); latestNavigation.current = navigation
-  const [failure, setFailure] = useState<string>()
-  const [mounted, setMounted] = useState<{ reader: ProjectReadDomain; reference: SessionReference }>()
+  const generation = useMemo(() => ({}), [domain, binding.projectId, binding.sessionId, binding.hostSessionId, binding.sessionCreatedAt, source?.kind === 'native-event' ? source.eventDigest : undefined, focus?.id])
+  const [failureState, setFailure] = useState<{ scope: object; message: string }>()
+  const [mountedState, setMounted] = useState<{ reader: ProjectReadDomain; reference: SessionReference; generation: object }>()
+  const mounted = mountedState?.generation === generation ? mountedState : undefined
   const sourceRequest = useSyncExternalStore(domain.sourceFocus.subscribe, domain.sourceFocus.getSnapshot)
   const coordinate = mounted === undefined || focus === undefined ? undefined : coordinateFocusKey(mounted.reference.sessionId, focus)
+  const intent = sourceRequest?.source.hostSessionId === binding.hostSessionId ? sourceRequest : undefined
+  const targetIdentity = source ?? intent ?? coordinate
+  const request = useMemo(() => ({}), [generation, targetIdentity])
+  const [verification, setVerification] = useState<{ request: object; ready: boolean }>()
+  const verified = verification?.ready === true ? verification.request : undefined
+  const presentedFocus = useRef<object>()
+  const original = source ?? (intent !== undefined && !domain.focusedSourceIntents.has(intent) ? intent.source : undefined)
+  const sourceNavigationDone = intent !== undefined && domain.focusedSourceIntents.has(intent) && intent.coordinate === coordinate
+  const needsFocus = original !== undefined || coordinate !== undefined && !domain.focusedCoordinateIntents.has(coordinate) && !sourceNavigationDone
+  const failure = failureState?.scope === generation || failureState?.scope === request ? failureState.message : undefined
+  const bodyReady = visible && mounted !== undefined && failure === undefined && (!(needsFocus || verification?.request === request) || verified === request)
   const latestCoordinate = useRef(coordinate); latestCoordinate.current = coordinate
   const focusAttempt = useRef<AbortController>()
   const focusedExplicitSource = useRef<{ readonly source: NativeProjectSource; readonly binding: SessionBinding }>()
@@ -254,20 +267,20 @@ function ReaderPane({ domain, detail, binding, source, focus, visible = true, tr
       if (abort.signal.aborted || element.current === null) { await reader.dispose(); return }
       await painted(abort.signal)
       release = await reader.mount(element.current)
+      if (abort.signal.aborted) { release(); await reader.dispose(); return }
       domain.readers.add(reader); domain.readerProjects.set(reader, detail.project.id)
-      setMounted({ reader, reference })
+      setMounted({ reader, reference, generation })
     }
-    void start().catch(error => { if (!abort.signal.aborted) setFailure(error instanceof Error ? error.message : String(error)) })
+    void start().catch(error => { if (!abort.signal.aborted) setFailure({ scope: generation, message: error instanceof Error ? error.message : String(error) }) })
     return () => { abort.abort(); setMounted(undefined); if (reader !== undefined) domain.retireView(reader, release) }
-  }, [domain, binding.projectId, binding.sessionId, binding.hostSessionId, binding.sessionCreatedAt, source?.kind === 'native-event' ? source.eventDigest : undefined, focus?.id])
+  }, [generation])
   useEffect(() => {
     if (mounted === undefined || !visible) return
-    const original = source ?? (sourceRequest?.source.hostSessionId === binding.hostSessionId && !domain.focusedSourceIntents.has(sourceRequest) ? sourceRequest.source : undefined)
     if (source !== undefined && focusedExplicitSource.current?.source === source && focusedExplicitSource.current.binding === mounted.reference.binding) return
-    const sourceNavigationDone = sourceRequest !== undefined && domain.focusedSourceIntents.has(sourceRequest) && sourceRequest.coordinate === coordinate
-    if (original === undefined && (coordinate === undefined || domain.focusedCoordinateIntents.has(coordinate) || sourceNavigationDone)) return
+    if (!needsFocus) return
     const abort = new AbortController()
     focusAttempt.current = abort
+    setFailure(undefined); setVerification({ request, ready: false })
     const originalDetail = source === undefined && sourceRequest !== undefined && sourceRequest.source === original ? sourceRequest.detail : detail
     const action = original !== undefined ? domain.focusSource(originalDetail, original, mounted.reader.focusOwner, abort.signal, mounted.reference.binding)
       : domain.focusCoordinate(mounted.reference.sessionId, focus!, abort.signal, mounted.reader.focusOwner, mounted.reference.binding)
@@ -277,14 +290,25 @@ function ReaderPane({ domain, detail, binding, source, focus, visible = true, tr
       if (source !== undefined) focusedExplicitSource.current = { source, binding: mounted.reference.binding }
       else if (original !== undefined && sourceRequest !== undefined) domain.focusedSourceIntents.add(sourceRequest)
       if (original === undefined && coordinate !== undefined) domain.focusedCoordinateIntents.add(coordinate)
-      setFailure(undefined)
-    }, error => { if (current()) setFailure(error instanceof Error ? error.message : String(error)) })
+      setFailure(undefined); setVerification({ request, ready: true })
+    }, error => { if (current()) setFailure({ scope: request, message: error instanceof Error ? error.message : String(error) }) })
     return () => { abort.abort(); if (focusAttempt.current === abort) focusAttempt.current = undefined }
-  }, [domain, mounted, source, sourceRequest, coordinate, visible])
+  }, [domain, mounted, source, sourceRequest, coordinate, visible, request])
+  useLayoutEffect(() => {
+    const root = element.current
+    if (root === null) return
+    // Exact focus needs connected native DOM, but unverified Chat must remain
+    // unavailable to both sighted users and keyboard/accessibility navigation.
+    root.inert = !bodyReady
+    if (!bodyReady || verified !== request || presentedFocus.current === request) return
+    presentedFocus.current = request
+    root.querySelector<HTMLElement>('[data-project-source-focused]')?.focus({ preventScroll: true })
+  }, [bodyReady, verified, request])
   return <div className="projects-ui__stock-pane"><p className="projects-ui__stock-readonly" role="status">{translate('p5.reading.originalReadOnly')}</p>
     {failure !== undefined ? <ErrorState title={translate('whole.stock.reading.failed')} description={translate('wholeRead.navigation.recovery')} diagnostic={{ label: translate('whole.stock.reading.failed'), content: failure }} />
-      : mounted === undefined ? <LoadingState label={translate('whole.stock.reading.loading')} rows={3} /> : null}
-    <div ref={element} className="projects-ui__stock-pane-body" />
+      : !bodyReady ? <LoadingState label={translate('whole.stock.reading.loading')} rows={3} /> : null}
+    <div ref={element} className="projects-ui__stock-pane-body" hidden={failure !== undefined} aria-hidden={!bodyReady}
+      style={{ display: failure === undefined ? undefined : 'none', visibility: bodyReady ? undefined : 'hidden' }} />
   </div>
 }
 
@@ -515,7 +539,7 @@ export class FullProjectClientDomain {
         if (!this.sessions.isCurrent(address)) throw new Error('PROJECT_INPUT_STALE: upload carrier was replaced before dispatch')
         return this.remote.fileUpload.upload(SessionId(address.hostSessionId), body, name, signal, progress)
       } })
-    installProjectChat(ctx, { fileReader: this.fileReader, focusOwner: this.focusOwner, allowBranch: false,
+    installProjectChat(ctx, { fileReader: this.fileReader, focusOwner: this.focusOwner,
       replySessionLinkSource: id => {
         const source = this.sourceBindings.get(id)
         return source?.role === 'main' || source?.role === 'execution' ? { originProjectId: source.projectId, role: source.role } : undefined

@@ -77,6 +77,7 @@ import { withProjectCallIdentity } from '../model/capture.ts'
 import { projectRecordingPolicy } from '../recording/index.ts'
 import { projectStreamRecording } from '../recording/index.ts'
 import { executeToolCalls } from '../tools/native-scheduler-rc2.ts'
+import { assertPrivateUiInputPublication } from '../ui-host/attachments.ts'
 
 type Phase =
   | { kind: 'idle'; lastTurn: number }
@@ -278,10 +279,12 @@ export class ProjectAgent implements Agent {
   }
 
   followup(input: UserMessage): void {
+    assertPrivateUiInputPublication(this.loopCtx, this, input)
     this.send(input, 'next-turn', true)
   }
 
   steer(input: UserMessage): void {
+    assertPrivateUiInputPublication(this.loopCtx, this, input)
     this.send(input, 'next-step', true)
   }
 

@@ -29,7 +29,6 @@ interface LifecyclePorts {
   changed(): void
   canDrive?(id: string): boolean
   rootFor(id: string): string | undefined
-  resolveRoot?(header: SessionHeader): Promise<Agent>
   modelInitializationFailed?(id: string): boolean
   drain(ids: readonly string[]): Promise<void>
   now(): string
@@ -187,13 +186,14 @@ export class ProjectExecutionLifecycle {
    * @param header - exact creation identity from the original non-activating reader.
    * @returns this caller's release; it removes only this cut and never wakes old input.
    */
-  prepareScheduleConfiguration(header: SessionHeader): { release(): void } {
+  prepareScheduleConfiguration(header: SessionHeader): { assertCurrent(header: SessionHeader): void; release(): void } {
     const id=String(header.id)
     if(this.closing||this.cuts.has(id)||this.deletingTargets.has(id))throw new Error('原目标已有生命周期动作，不能另建设置准备。')
     const cut:InputCut={rootId:id,header,preserve:true,configuration:true}
     this.cuts.set(id,cut)
     try{this.ports?.changed()}catch(error){this.cuts.delete(id);throw error}
-    return {release:()=>{if(this.cuts.get(id)!==cut)return;this.cuts.delete(id);this.ports?.changed()}}
+    return {assertCurrent:expected=>{if(this.cuts.get(id)!==cut)throw new Error('原设置准备已释放或已由其他生命周期动作接管。');if(!sameOwnedCreationHeader(cut.header,expected))throw new Error('原设置准备的创建身份不相符。')},
+      release:()=>{if(this.cuts.get(id)!==cut)return;this.cuts.delete(id);this.ports?.changed()}}
   }
 
   /** 永久删除接管仍在同FIFO；只移交所选root，不发布active或恢复B。 */

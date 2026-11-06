@@ -26,6 +26,7 @@ import type {
 import type { InputSubmitMode, MessageSubmission, MessageSubmissionState } from '../contract/composer-submission.ts'
 import { SubmitMachine } from './machine.ts'
 import { DraftEditorRuntime } from './editor/runtime.ts'
+import { focusDraftEditor } from './editor/view-binding.ts'
 import type { EditorProjection } from './editor/projection.ts'
 
 /** Popup face the shell needs (dismissal only; typed structurally to avoid a value import). */
@@ -539,8 +540,7 @@ export class SessionInputShell implements SessionInput {
    * contenteditable would land the caret at the start instead.
    */
   focus(): void {
-    this.editor.getRootElement()?.focus({ preventScroll: true })
-    this.editor.focus()
+    focusDraftEditor(this.editor, () => {})
   }
 
   // ---- wiring-layer extras (not on the frozen SessionInput face) ----

@@ -76,7 +76,11 @@ export interface PrivateSessionUiConfig {
   readonly validateCapture?: (address: ProjectUiCarrierAddress) => void | Promise<void>
   /** Visibility classification only. Unknown/corrupt ownership must reject; it is never an access grant. */
   readonly isVisibleTarget: (id: SessionId, signal?: AbortSignal) => Promise<boolean>
+  /** The saved source owner publishes eligibility changes after its commit. */
+  readonly subscribeTargetChanges?: (listener: () => void) => () => void
   readonly resolveTarget: (id: SessionId, operation: PrivateSessionUiOperation) => void | Promise<void>
+  /** 原control同步核对实时生命周期cut和工作准入。 */
+  readonly assertAdmitting: (id: SessionId, agent: Agent) => void
 }
 
 export interface PrivateSessionUiPort {
@@ -261,7 +265,7 @@ export async function installPrivateSessionUi(ctx: Context, config: PrivateSessi
   const rejectReadonly = (access?: ProjectUiAccess) => {
     if (access?.readonly === true) throw new Error('PROJECT_READ_ONLY: historical reader cannot mutate a Session')
   }
-  const write = <T>(request: ProjectUiTarget, action: () => T | Promise<T>): Promise<T> => track(async () => {
+  const assertWriteTarget = async (request: ProjectUiTarget) => {
     rejectReadonly(request)
     const id = request.sessionId
     await assertTarget(id, 'write')
@@ -274,7 +278,20 @@ export async function installPrivateSessionUi(ctx: Context, config: PrivateSessi
       await config.validateCapture(structuredClone(request.carrier))
     }
     active()
-    return attachments.runFor(id, action)
+  }
+  const write = <T>(request: ProjectUiTarget, action: () => T | Promise<T>, signal?: AbortSignal, requestId?: string): Promise<T> => track(async () => {
+    const scope = lifetime(signal)
+    await assertWriteTarget(request)
+    const id = request.sessionId
+    return attachments.runForUiInput(id, {
+      requestId,
+      revalidate: () => assertWriteTarget(request),
+      assertCurrent: agent => {
+        scope.throwIfAborted()
+        if (ctx.agents.get(id) !== agent) throw new Error('PROJECT_UI_AGENT_UNAVAILABLE: original private Agent changed during prompt preparation')
+        config.assertAdmitting(id, agent)
+      },
+    }, action)
   })
   const agentFor = async (id: SessionId, operation: 'read' | 'write', signal?: AbortSignal): Promise<Agent> => {
     const scope = lifetime(signal)
@@ -350,6 +367,9 @@ export async function installPrivateSessionUi(ctx: Context, config: PrivateSessi
         startCatalog()
       }
       const disposers = [
+        // Native retirement can precede the saved source commit. That commit
+        // must supersede any catalog read which still observed the old source.
+        ...(config.subscribeTargetChanges === undefined ? [] : [config.subscribeTargetChanges(() => refreshCatalog(true))]),
         ctx.on('api-session/status', (sessionId, running) => queue.push({ type: 'status', sessionId, running })),
         ctx.on('api-session/error', (sessionId, message) => queue.push({ type: 'error', sessionId, message })),
         ctx.on('api-session/added', () => refreshCatalog(true)),
@@ -462,7 +482,7 @@ export async function installPrivateSessionUi(ctx: Context, config: PrivateSessi
       await assertTarget(id, 'read')
       return projectUiHistoryPage(page)
     }),
-    prompt: (input, signal) => { const request = structuredClone(input); return write(request, () => controller.prompt(request, lifetime(signal))) },
+    prompt: (input, signal) => { const request = structuredClone(input); return write(request, () => controller.prompt(request, lifetime(signal)), signal, request.requestId) },
     cancel: input => { const request = structuredClone(input); return write(request, () => controller.cancel(request)) },
     updateQueue: input => { const request = structuredClone(input); return write(request, () => controller.updateQueue(request)) },
     modelCatalog: () => track(() => controller.modelCatalog()),

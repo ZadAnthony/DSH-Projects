@@ -227,7 +227,9 @@ export class ProjectsFacade {
               return result.agent
             },
             resolveTarget: (id, operation) => this.resolveTarget(id, operation),
+            assertAdmitting: ownership.assertAdmitting,
             isVisibleTarget: (id, signal) => this.isVisibleUiTarget(id, signal),
+            subscribeTargetChanges: listener => this.store.addSourceDispositionListener(() => listener()),
             validateCapture: address => this.validateCapture(address),
             validateRelatedCapture: (address, id) => this.validateRelatedCapture(address, id),
             subagentCatalog: async (id, signal) => {

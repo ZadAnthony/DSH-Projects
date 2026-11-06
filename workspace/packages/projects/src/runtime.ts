@@ -314,7 +314,6 @@ export class ProjectsRuntime implements ProjectToolRuntime {
         canDrive: id => !this.withheldMainHosts.has(id),
         changed: () => { if (this.snapshotsByProjectId.size > 0 || this.disposeCatalogMembership !== undefined) this.publishCatalogSnapshot() },
         rootFor: id => this.sourceDisposition.execution?.get(SessionId(id))?.rootSessionId,
-        resolveRoot: header => this.resolveLifecycleRoot(header),
         modelInitializationFailed: id => this.modelInitializationErrors.has(SessionId(id)),
         drain: ids => {
           const pending = ids.flatMap(id => [...(this.targetOperations.get(id) ?? [])])
@@ -975,13 +974,13 @@ export class ProjectsRuntime implements ProjectToolRuntime {
   async queryHistory(request: QueryProjectHistoryRequest, signal: AbortSignal): Promise<ProjectHistorySearchResult> {
     this.assertReady()
     const { projectId, ...query } = request
-    return this.historyReader.search(projectId, query, signal, undefined, { displaySummary: true })
+    return this.historyReader.search(projectId, query, signal, undefined, { displaySummary: true, chat: true })
   }
 
   async readHistory(request: ReadProjectHistoryRequest, signal: AbortSignal): Promise<ProjectHistoryReadResult> {
     this.assertReady()
     const { projectId, ...query } = request
-    return this.historyReader.read(projectId, query, signal)
+    return this.historyReader.read(projectId, query, signal, { chat: true })
   }
 
   async readCommunication(request: ReadProjectCommunicationRequest, signal: AbortSignal): Promise<ProjectCommunicationRead> {
@@ -1789,7 +1788,7 @@ export class ProjectsRuntime implements ProjectToolRuntime {
         }
         assertCurrent()
         let agent=this.ctx.agents.get(SessionId(target.hostSessionId))
-        let hold:{release():void}|undefined
+        let hold:{assertCurrent(header:SessionHeader):void;release():void}|undefined
         if(agent===undefined){
           const current=this.currentScheduleTarget(target)
           const read=await this.core.readNativePrefix(target.projectId,target.hostSessionId)
@@ -1803,7 +1802,7 @@ export class ProjectsRuntime implements ProjectToolRuntime {
             // Existing factory initialization observes the cut before its first possible Inbox claim.
             hold=this.lifecycle.prepareScheduleConfiguration(inspected.meta)
             try{
-              const resolved=await this.composition.ports.control.resolve(SessionId(target.hostSessionId))
+              const resolved=await this.composition.ports.control.resolveScheduleConfiguration(inspected.meta,hold)
               if('error' in resolved)throw new Error(resolved.error.message)
               agent=resolved.agent
               const membership=this.membershipsByHostSessionId.get(target.hostSessionId)
@@ -1951,58 +1950,6 @@ export class ProjectsRuntime implements ProjectToolRuntime {
     } finally {
       listeners.delete(listener); signal.removeEventListener('abort', abort)
       if (listeners.size === 0) this.memoryNoticeListeners.delete(projectId)
-    }
-  }
-
-  /** Resume an existing hidden root under its own Bot scope for lifecycle settlement only. */
-  private async resolveLifecycleRoot(header: SessionHeader): Promise<Agent> {
-    const id = header.id
-    const membership = this.membershipsByHostSessionId.get(id)
-    if (membership === undefined) throw new Error('项目生命周期根会话归属尚未可读。')
-    if (membership.session.role === 'main' || membership.session.role === 'execution') {
-      const resolved = await this.composition.ports.control.resolve(id)
-      if ('error' in resolved) throw resolved.error
-      return resolved.agent
-    }
-    for (;;) {
-      const pending = this.creatingRoots.get(id)
-      if (pending !== undefined) { await pending; continue }
-      const live = this.ctx.agents.get(id)
-      if (live !== undefined) {
-        if (!sameOwnedCreationHeader(live.session.header, header)) throw new Error('后台根会话创建身份发生变化。')
-        await this.installProjectAgentScope(live, membership)
-        return live
-      }
-      const previous = this.handles.get(id)
-      if (previous === undefined) break
-      await previous.dispose()
-      if (this.handles.get(id) === previous) this.handles.delete(id)
-    }
-    const creation = Promise.withResolvers<void>()
-    this.creatingRoots.set(id, creation.promise); void creation.promise.catch(() => {})
-    try {
-      const route = membership.session.role === 'memory' ? this.options.memoryModel : this.options.sessionManagerModel
-      const handle = await this.ctx.agents.resume({
-        resumeSessionId: id,
-        ...(route?.provider && route.model ? { agentOptions: route } : {}),
-        setup: async (_agentCtx, agent) => {
-          if (!sameOwnedCreationHeader(agent.session.header, header)) throw new Error('后台根会话创建身份发生变化。')
-          await this.installProjectAgentScope(agent, membership)
-        },
-      })
-      this.handles.set(id, handle)
-      if (this.disposed) {
-        const stopped = await this.composition.ports.control.retire(id, { handle })
-        if (stopped.status !== 'stopped') throw new Error('后台根会话晚恢复关闭未确认。')
-        throw new ProjectsClosingError()
-      }
-      return handle.agent
-    } catch (error) {
-      creation.reject(error)
-      throw error
-    } finally {
-      creation.resolve()
-      if (this.creatingRoots.get(id) === creation.promise) this.creatingRoots.delete(id)
     }
   }
 

@@ -49,7 +49,9 @@
     {
       "path": "packages/client/ui-conversation/src/client/input/editor/ComposerContentEditable.tsx",
       "local": "client/input/editor/ComposerContentEditable.tsx",
-      "sha256": "1a2a70d24d48b04e13057c40b3cec916c5f3a81c71b8c5a6006b83861b972cd8"
+      "sha256": "1a2a70d24d48b04e13057c40b3cec916c5f3a81c71b8c5a6006b83861b972cd8",
+      "localSha256": "aeab13b8f494928a757279a882fbf07702fd43e366ed1a327042dbe0115df347",
+      "modified": true
     },
     {
       "path": "packages/client/ui-conversation/src/client/input/editor/DecoratorPortals.tsx",
@@ -127,7 +129,7 @@
       "path": "packages/client/ui-conversation/src/client/input/facade.ts",
       "local": "client/input/facade.ts",
       "sha256": "40516258b5c0d84dfbf2097d5a67234c4a1a6e6a54a7145af3bc944d0adb549f",
-      "localSha256": "3864cb825a4cb5bea8af41b9714554de9f1a59660f2ed0843192cfdd4a9a9442",
+      "localSha256": "eeb0150a2208d8643835553e6905a6bf3cd55f98c017badeef4906572ba112d2",
       "modified": true
     },
     {

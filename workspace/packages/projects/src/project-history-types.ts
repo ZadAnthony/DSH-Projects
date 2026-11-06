@@ -52,6 +52,8 @@ export interface ProjectHistoryReadRequest {
   readonly source: NativeProjectSource | CommunicationSavedPartSource;
   readonly before?: number;
   readonly after?: number;
+  /** UI-only exact chat text offset, in Unicode code points. Each read returns at most 4096. */
+  readonly chatTextStart?: number;
 }
 
 /** A message candidate retains one real matching event; the group's other versions stay independently readable. */
@@ -60,7 +62,7 @@ export interface ProjectHistorySearchItem extends NativeProjectSourceItem {
   /** Bounded UI-only projection; never original text or a source/match coordinate space. */
   readonly displaySummary?: ProjectHistoryDisplaySummary;
   readonly excerpt?: { readonly unit: 'unicode-code-points'; readonly start: number; readonly end: number; readonly total: number };
-  readonly match?: { readonly method: 'literal-case-insensitive'; readonly field: 'text'; readonly start: number; readonly end: number };
+  readonly match?: { readonly method: 'literal-case-insensitive'; readonly field: 'text' | 'chat.text'; readonly start: number; readonly end: number };
   readonly messageGroup?: {
     readonly hostSessionId: string;
     readonly messageId: string;

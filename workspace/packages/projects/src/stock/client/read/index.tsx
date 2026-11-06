@@ -23,7 +23,7 @@ import { ProjectReadSessions, projectReadOnlyError, type ProjectReadRemotePort }
 import { ProjectFileReaderOwner, sameProjectFileBinding, type ProjectFileBinding } from './file-reader.ts'
 import { ProjectFocusOwner } from './focus.ts'
 import { installProjectChat, type InstallProjectChatOptions } from './install-chat.tsx'
-import { installProjectReadOnlyNativePresentations } from '../capabilities/read-only.ts'
+import { installProjectReadOnlyNativePresentations, type ProjectReadOnlyNativePresentationPorts } from '../capabilities/read-only.ts'
 import type { ProjectChangedFilesPorts } from '../capabilities/changes/index.ts'
 import type { ProjectPresentedFilesPorts } from '../capabilities/deliverables/index.ts'
 import type { ProjectNativeToolCapabilityPorts } from '../capabilities/contracts.ts'
@@ -137,7 +137,7 @@ export class ProjectReadDomain {
     applyUiSession(ctx)
     const conversation = new UiConversation(ctx, this.sessions)
     ctx.uiSession.provide({ hooks: ['conversation'], resolve: binding => ({ hooks: { conversation: conversation.binding(binding).snapshot } }) })
-    installProjectChat(ctx, { fileReader: options.fileReader, focusOwner: this.focusOwner, allowBranch: false,
+    installProjectChat(ctx, { fileReader: options.fileReader, focusOwner: this.focusOwner,
       replySessionLinkSource: id => {
         const source = options.fileReader.options.resolveBinding(id)
         return source?.role === 'main' || source?.role === 'execution' ? { originProjectId: source.projectId, role: source.role } : undefined
@@ -176,10 +176,14 @@ export class ProjectReadDomain {
       if (exact === undefined) throw new Error('PROJECT_SOURCE_STALE: original presented file session is unavailable')
       await options.fileReader.openFile(exact, path, settings)
     }
-    this.ready = installProjectReadOnlyNativePresentations(ctx, { session: {
+    const session: ProjectReadOnlyNativePresentationPorts['session'] = {
       follow: (request, signal) => sourceSession(request.address).follow(request, signal),
       page: (request, signal) => sourceSession(request.address).page(request, signal),
-    }, openResourceFallback: fallback, presentedFiles: { openFile: openPresentedFile, ...(options.externalFiles === undefined ? {} : { externalFiles: options.externalFiles }) },
+    }
+    const remote = ctx.remote
+    ctx.set('remote', { ...remote, $host: remote.$host, $on: remote.$on.bind(remote), session })
+    this.ready = installProjectReadOnlyNativePresentations(ctx, { session,
+      openResourceFallback: fallback, presentedFiles: { openFile: openPresentedFile, ...(options.externalFiles === undefined ? {} : { externalFiles: options.externalFiles }) },
       ...(options.changedFiles === undefined ? {} : { changedFiles: { ...options.changedFiles, openFile: openPresentedFile } }),
     }).then(async handle => {
       this.nativePresentations = handle

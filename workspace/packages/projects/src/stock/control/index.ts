@@ -31,7 +31,6 @@ export interface ProjectOwnedControlConfig {
   readonly read: CarrierReadControl
   readonly getFactory: () => ProjectAgentFactory | undefined
   readonly recordsRoot?: string
-  readonly getAttachments?: () => CarrierReadControl['attachments'] | undefined
   readonly canSaveColdInput?: (id: SessionId) => boolean | Promise<boolean>
   readonly resumeOptions?: (id: SessionId) => AgentOptions | Promise<AgentOptions>
 }
@@ -55,19 +54,23 @@ interface QuiescenceHooks {
   capture(session: Session): void
   settle(agent: Agent): Promise<void>
   settleCold?(id: SessionId, selected: readonly MessageId[]): Promise<void>
-  resolveRoot?(header: SessionHeader): Promise<Agent>
 }
+type ProjectCreationPermit =
+  | { kind: 'prepared-root'; id: SessionId; active: boolean; projectId: string; sessionId: string; attemptId: string }
+  | { kind: 'schedule-configuration'; id: SessionId; active: boolean; header: SessionHeader; hold: { assertCurrent(header: SessionHeader): void } }
+type ScheduleConfigurationPermit = Extract<ProjectCreationPermit, { kind: 'schedule-configuration' }>
+type ProjectResolution = { agent: Agent } | { error: { message: string } }
 
 /** Real lifecycle ownership for this private graph; no root service is replaced. */
 export class ProjectOwnedControl implements ProjectControlPort, ProjectFactoryLifecycle, StockCapabilityOwnership {
-  private readonly preparedCreation = new AsyncLocalStorage<{ id: SessionId; active: boolean; projectId: string; sessionId: string; attemptId: string }>()
+  private readonly creationPermit = new AsyncLocalStorage<ProjectCreationPermit>()
   private readonly admissions = new Set<ProjectInputAdmission>()
   private readonly dispositions = new Set<{ getSnapshot(): ProjectSourceDispositionSnapshot }>()
   private readonly cuts = new Map<SessionId, Set<object>>()
   private readonly archiveSaving = new Map<SessionId, Set<object>>()
   private readonly responsibilities = new Set<Responsibility>()
   private readonly generations = new Map<SessionId, number>()
-  private readonly resolving = new Map<SessionId, Promise<{ agent: Agent } | { error: { message: string } }>>()
+  private readonly resolving = new Map<SessionId, { purpose: 'work' | 'configuration'; operation: Promise<ProjectResolution> }>()
   private readonly retirementCuts = new Map<SessionId, Set<() => void>>()
   private readonly retirement = new WeakMap<Agent, Promise<{ status: 'stopped' | 'unconfirmed'; errors: readonly unknown[] }>>()
   private readonly inputOperations = new Map<SessionId, Set<Promise<unknown>>>()
@@ -103,13 +106,18 @@ export class ProjectOwnedControl implements ProjectControlPort, ProjectFactoryLi
       || ownership.preparation.attemptId !== request.attemptId || ownership.preparation.state !== 'unpublished' || ownership.preparation.toHeader !== undefined
       || ownership.session.role !== 'main' || ownership.session.hostSessionId !== ownership.preparation.fromHeader.id
       || ownership.project.archived || ownership.session.archived || ownership.preparation.sourceLifecycle !== undefined) throw new Error('Projects prepared creation requires the exact current Store reservation')
-    const permit = { id: request.options.sessionId, active: true, projectId: request.projectId, sessionId: request.sessionId, attemptId: request.attemptId }
-    try { return await this.preparedCreation.run(permit, () => this.ctx.agents.create(request.options)) }
+    const permit = { kind: 'prepared-root' as const, id: request.options.sessionId, active: true, projectId: request.projectId, sessionId: request.sessionId, attemptId: request.attemptId }
+    try { return await this.creationPermit.run(permit, () => this.ctx.agents.create(request.options)) }
     finally { permit.active = false }
   }
   async validateCreation(id: SessionId, header: SessionHeader, parent?: Agent, kind: 'create' | 'resume' = 'create'): Promise<void> {
-    const permit = this.preparedCreation.getStore()
+    const permit = this.creationPermit.getStore()
     if (permit === undefined) return
+    if (permit.kind === 'schedule-configuration') {
+      this.assertConfigurationCreation(permit, id, parent, kind)
+      if (!sameOwnedCreationHeader(permit.header, header)) throw new Error('Projects configuration resume creation identity changed')
+      return
+    }
     if (!permit.active || permit.id !== id || kind !== 'create' || parent !== undefined) throw new Error('Projects prepared creation capability does not match this exact transaction')
     const ownership = await this.config.store?.resolveHostOwnership(id)
     if (ownership?.kind !== 'preparation' || ownership.project.id !== permit.projectId || ownership.session.id !== permit.sessionId
@@ -119,7 +127,8 @@ export class ProjectOwnedControl implements ProjectControlPort, ProjectFactoryLi
       || ownership.preparation.toHeader !== undefined && !sameOwnedCreationHeader(ownership.preparation.toHeader, header)) throw new Error('Projects prepared reservation changed before actual publication')
   }
   assertCreation(id: SessionId, parent?: Agent, kind: 'create' | 'resume' = 'create'): void {
-    const permit = this.preparedCreation.getStore()
+    const permit = this.creationPermit.getStore()
+    if (permit?.kind === 'schedule-configuration') { this.assertConfigurationCreation(permit, id, parent, kind); return }
     if (kind === 'create' && parent === undefined && permit?.active === true && permit.id === id) {
       if (this.closing || this.held(id) || [...this.dispositions].some(source => source.getSnapshot().unavailable.has(id))) throw new Error('Projects reserved creation was withdrawn before publication')
       return
@@ -129,6 +138,27 @@ export class ProjectOwnedControl implements ProjectControlPort, ProjectFactoryLi
       this.assertAdmitting(parent.id, parent)
     }
     this.assertAdmitting(id)
+  }
+  private assertConfigurationCreation(permit: ScheduleConfigurationPermit, id: SessionId, parent: Agent | undefined, kind: 'create' | 'resume'): void {
+    if (!permit.active || permit.id !== id || kind !== 'resume' || parent !== undefined) throw new Error('Projects configuration resume capability does not match this exact transaction')
+    this.assertConfigurationAdmitting(permit)
+  }
+  private assertConfigurationAdmitting(permit: ScheduleConfigurationPermit): void {
+    const id = permit.id
+    if (!permit.active) throw new Error('Projects configuration resume capability was released')
+    permit.hold.assertCurrent(permit.header)
+    if (this.closing || this.held(id, this.ctx.agents.get(id))) throw new Error('Projects target is closing or retiring')
+    let configuration = false
+    for (const source of this.dispositions) {
+      const snapshot = source.getSnapshot()
+      if (snapshot.unavailable.has(id)) throw new Error('Projects source is unavailable')
+      const execution = snapshot.execution?.get(id)
+      if (execution === undefined || execution.state === 'active') continue
+      if (execution.state !== 'readonly' || execution.scope !== 'session' || execution.rootSessionId !== id) throw new Error('Projects target is read-only or its state is unknown')
+      configuration = true
+    }
+    if (!configuration) throw new Error('Projects configuration resume requires its current root driving hold')
+    for (const admission of this.admissions) admission.assert(id, 'Projects configuration resume')
   }
   created(handle: AgentHandle): void { this.bump(handle.agent.id) }
   assertAdmitting(id: SessionId, agent?: Agent): void {
@@ -323,24 +353,48 @@ export class ProjectOwnedControl implements ProjectControlPort, ProjectFactoryLi
     finally { await handle.close() }
   }
   resolve(id: SessionId): Promise<{ agent: Agent } | { error: { message: string } }> {
+    return this.resolveOwned(id)
+  }
+  resolveScheduleConfiguration(header: SessionHeader, hold: { assertCurrent(header: SessionHeader): void }): Promise<{ agent: Agent } | { error: { message: string } }> {
+    const permit: ScheduleConfigurationPermit = { kind: 'schedule-configuration', id: header.id, active: true, header: structuredClone(header), hold }
+    return this.creationPermit.run(permit, async () => {
+      try { return await this.resolveOwned(permit.id, permit) }
+      finally { permit.active = false }
+    })
+  }
+  private resolveOwned(id: SessionId, configuration?: ScheduleConfigurationPermit): Promise<{ agent: Agent } | { error: { message: string } }> {
+    const failure = (error: unknown) => ({ error: { message: error instanceof Error ? error.message : String(error) } })
+    const assert = () => configuration === undefined ? this.assertAdmitting(id) : this.assertConfigurationAdmitting(configuration)
+    try { assert() } catch (error) { return Promise.resolve(failure(error)) }
     const pending = this.resolving.get(id)
-    if (pending !== undefined) return pending
+    // 普通恢复不能借配置恢复的进行中结果越过只读准入；前一操作结清后各自重新判断。
+    if (pending !== undefined) return pending.operation.then(result => {
+      assert()
+      if (configuration !== undefined && pending.purpose === 'work' && 'error' in result) return this.resolveOwned(id, configuration)
+      if (configuration !== undefined && 'agent' in result && !sameOwnedCreationHeader(configuration.header, result.agent.session.header)) throw new Error('Projects configuration resume creation identity changed')
+      return result
+    }).catch(failure)
     const operation = (async () => {
       const tokens: { release(): void }[] = []
       try {
-        this.assertAdmitting(id)
+        assert()
         const live = this.ctx.agents.get(id)
-        if (live !== undefined) return { agent: live }
+        if (live !== undefined) {
+          if (configuration !== undefined && !sameOwnedCreationHeader(configuration.header, live.session.header)) throw new Error('Projects configuration resume creation identity changed')
+          return { agent: live }
+        }
         for (const admission of this.admissions) { const token = admission.accept(id, 'Projects resume'); if (token !== undefined) tokens.push(token) }
         const options = await this.config.resumeOptions?.(id)
-        this.assertAdmitting(id)
+        assert()
         const handle = await this.ctx.agents.resume({ resumeSessionId: id, ...(options === undefined ? {} : { agentOptions: options }) })
+        assert()
         return { agent: handle.agent }
-      } catch (error) { return { error: { message: error instanceof Error ? error.message : String(error) } } }
+      } catch (error) { return failure(error) }
       finally { for (const token of tokens.reverse()) token.release() }
     })()
-    this.resolving.set(id, operation)
-    void operation.finally(() => { if (this.resolving.get(id) === operation) this.resolving.delete(id) })
+    const resolving = { purpose: configuration === undefined ? 'work' as const : 'configuration' as const, operation }
+    this.resolving.set(id, resolving)
+    void operation.finally(() => { if (this.resolving.get(id) === resolving) this.resolving.delete(id) })
     return operation
   }
   async inspectOwnedSessions(id: SessionId): Promise<readonly OwnedSubagentMember[]> {

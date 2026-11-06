@@ -2,8 +2,10 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
 import { Context } from '@deepseek-ai/cordis'
 import AttachmentStore, { AttachmentError } from '@deepseek-ai/dsh-attachment'
+import type { Agent } from '@deepseek-ai/dsh-agent'
+import type { UserMessage } from '@deepseek-ai/dsh-llm'
 import type {
-  FileAttachmentRef, ImageAttachmentRef, ImageRequestTarget, SaveFileAttachment,
+  AttachmentAdmissionPart, FileAttachmentRef, ImageAttachmentRef, ImageRequestTarget, SaveFileAttachment,
   SaveFileStreamAttachment, SaveImageAttachment,
 } from '@deepseek-ai/dsh-attachment'
 import type LocalAttachmentStore from '@deepseek-ai/dsh-attachment-local'
@@ -17,13 +19,26 @@ import type {} from '@deepseek-ai/dsh-tools'
 import type {} from '@deepseek-ai/dsh-llm'
 import type {} from '../read/index.ts'
 
+interface UiInputAdmission {
+  readonly requestId?: string
+  revalidate(): Promise<void>
+  assertCurrent(agent: Agent): void
+}
+interface AttachmentCaller { id: SessionId; uiInput?: UiInputAdmission; preparedAgent?: Agent }
+
+/** 只供项目自有driver的同步UI发布点消费，不改变内部send准入。 */
+export function assertPrivateUiInputPublication(ctx: Context, agent: Agent, message: UserMessage): void {
+  const attachments = ctx.get('attachments')
+  if (attachments instanceof PrivateSessionAttachments) attachments.assertUiInputPublication(agent, message)
+}
+
 /**
  * The controller has no Agent scope while admitting prompt bytes. Its explicit
  * target is carried through async admission; Agent/tool callers use their real
  * public scope chain. Missing ownership fails, rather than using a global store.
  */
 export class PrivateSessionAttachments extends AttachmentStore {
-  private readonly target = new AsyncLocalStorage<SessionId>()
+  private readonly target = new AsyncLocalStorage<AttachmentCaller>()
   private readonly owners = new WeakMap<object, SessionId>()
   private readonly backends = new Map<SessionId, LocalAttachmentStore>()
   readonly imageLimits = Object.freeze({
@@ -58,7 +73,36 @@ export class PrivateSessionAttachments extends AttachmentStore {
     })
   }
 
-  runFor<T>(id: SessionId, action: () => T): T { return this.target.run(id, action) }
+  runFor<T>(id: SessionId, action: () => T): T { return this.target.run({ id }, action) }
+
+  /** UI准备完成后仍须沿原caller核验；内部消息不继承UI发布权限。 */
+  runForUiInput<T>(id: SessionId, uiInput: UiInputAdmission, action: () => T | Promise<T>): Promise<T> {
+    const caller: AttachmentCaller = { id, uiInput }
+    return this.target.run(caller, async () => {
+      try { return await action() }
+      finally { caller.uiInput = undefined; caller.preparedAgent = undefined }
+    })
+  }
+
+  assertUiInputPublication(agent: Agent, message: UserMessage): void {
+    const caller = this.target.getStore(), input = caller?.uiInput
+    if (input?.requestId === undefined || caller?.id !== agent.id || message.source.kind !== 'user'
+      || !('rpcId' in message.source) || message.source.rpcId !== input.requestId) return
+    if (caller.preparedAgent !== agent) throw new Error('PROJECT_UI_AGENT_UNAVAILABLE: original private Agent changed during prompt preparation')
+    input.assertCurrent(agent)
+  }
+
+  override async admitPromptContent(content: readonly AttachmentAdmissionPart[]) {
+    const caller = this.target.getStore()
+    if (caller?.uiInput === undefined) return super.admitPromptContent(content)
+    const agent = this.ownerCtx.agents.get(caller.id)
+    if (agent === undefined) throw new Error('PROJECT_UI_AGENT_UNAVAILABLE: original private Agent is unavailable during prompt preparation')
+    caller.preparedAgent = agent
+    const admitted = await super.admitPromptContent(content)
+    await caller.uiInput.revalidate()
+    caller.uiInput.assertCurrent(agent)
+    return admitted
+  }
 
   /** Await in factory setup, before the Agent is published or accepts work. */
   async bindAgent(ctx: Context, id: SessionId): Promise<void> {
@@ -76,7 +120,7 @@ export class PrivateSessionAttachments extends AttachmentStore {
       if (bound !== undefined) return bound
     }
     const explicit = this.target.getStore()
-    if (explicit !== undefined) return explicit
+    if (explicit !== undefined) return explicit.id
     throw new AttachmentError('Projects attachment operation has no carrier owner.', 'INVALID_ATTACHMENT_REF')
   }
 

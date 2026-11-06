@@ -1,9 +1,13 @@
 /** Presentation of durable non-human messages claimed to begin a Turn. */
 import type { ContextMessageNode } from '../contract/snapshot.ts'
-import type { ChatKey } from '../locale.ts'
+import { NS, STATUS_NS, type ChatKey } from '../locale.ts'
 
 /** Existing primitive glyph selected for a Turn trigger's source family. */
-export type TurnTriggerIcon = 'agent' | 'github' | 'goal' | 'job' | 'plugin' | 'request' | 'schedule' | 'subagent' | 'team' | 'webhook'
+export type TurnTriggerIcon = 'agent' | 'error' | 'github' | 'goal' | 'job' | 'plugin' | 'request' | 'schedule' | 'subagent' | 'team' | 'webhook'
+
+type TriggerDetails =
+  | { namespace: typeof NS; title: ChatKey; icon: TurnTriggerIcon }
+  | { namespace: typeof STATUS_NS; title: 'trigger.executionFailure'; icon: 'error' }
 
 function record(value: unknown): Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : {}
@@ -18,12 +22,12 @@ function field(source: Record<string, unknown>, key: string): string {
  * @param node - durable context, including the original notification body.
  * @returns localized title key and source-family icon.
  */
-export function turnTriggerDetails(node: ContextMessageNode): {
-  title: ChatKey
-  icon: TurnTriggerIcon
-} {
+export function turnTriggerDetails(node: ContextMessageNode): TriggerDetails {
   const source = record(node.source)
   const kind = field(source, 'kind')
+  if (kind === 'project-execution-failure') {
+    return { namespace: STATUS_NS, title: 'trigger.executionFailure', icon: 'error' }
+  }
   let title: ChatKey = 'message.trigger.request'
   let icon: TurnTriggerIcon = 'request'
   switch (kind) {
@@ -67,5 +71,5 @@ export function turnTriggerDetails(node: ContextMessageNode): {
       // Custom sources remain visible without attributing unrecorded identity or success.
       break
   }
-  return { title, icon }
+  return { namespace: NS, title, icon }
 }

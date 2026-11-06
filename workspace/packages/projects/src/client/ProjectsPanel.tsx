@@ -1,6 +1,5 @@
 import { projectCarrierIdentity } from "./controller.ts";
 import {
-  Fragment,
   useCallback, useEffect, useLayoutEffect,
   useId, useMemo,
   useRef,
@@ -57,7 +56,6 @@ import type {
 import type { OverviewNavigation, OverviewSourceView } from "../features/overview/contract.ts";
 import { OverviewPanel } from "../features/overview/client.ts";
 import { ScheduleOverview, SchedulePanel } from "../features/schedule/client.ts";
-import { UsageSessionSummary, type ProjectUsageResult } from "../features/usage/client.ts";
 import type {
   ProjectDetail,
   LibraryOpenResult,
@@ -75,8 +73,8 @@ import type {
   ProjectUnavailableSource,
 } from "../public-types.ts";
 import type { NativeEventSource, NativeProjectSource } from "../source-types.ts";
-import { isProjectUiRawRecordType } from "../history-source-kinds.ts";
 import { historyRecordReadingProjection } from "../history-display-summary.ts";
+import { HistoryConversationReader, HistoryTextMatch } from "./history/HistoryConversationReader.tsx";
 import { LibraryPanel, LibraryReader, type LibrarySelection } from "./library/index.ts";
 import type { ConversationReading, LibraryReading, ReadingScrollPosition, ReadingOrigin, ReadingHint } from "./workflow-reading.ts";
 import { ConversationFileReader } from "./ConversationFileReader.tsx";
@@ -208,7 +206,12 @@ interface ProjectSourcePanelState {
 
 interface HistoryReadPanelState {
   readonly source: NativeProjectSource;
-  readonly result: ProjectHistoryReadResult;
+  readonly result?: ProjectHistoryReadResult;
+  readonly loading?: boolean;
+  readonly failed?: boolean;
+  readonly keyword?: string;
+  readonly attachmentSource?: NativeEventSource;
+  readonly attachmentOpener?: HTMLElement;
 }
 
 function FixedChatView({ renderSlot }: ConversationViewsProps): ReactNode {
@@ -483,9 +486,14 @@ function speakerLabel(value: ProjectHistorySpeaker | "", t: Translate): string {
 }
 
 function historySummaryText(item: ProjectHistorySearchItem, t: Translate): string {
-  if (item.displaySummary === undefined) return item.text;
+  if (item.displaySummary === undefined) return item.chat?.text ?? "";
   const text = item.displaySummary.map(part => typeof part === 'string' ? part : t(part.kind === 'partial-preview' ? 'project.history.partialPreview' : 'project.history.sessionLink')).join('');
   return Array.from(text).slice(0, 256).join('');
+}
+
+function historySpeakerText(item: ProjectHistorySearchItem, t: Translate): string {
+  return t(item.chat?.kind === "communication" ? "project.history.speaker.project-delivery"
+    : item.speaker === "user" || item.role === "user" ? "project.history.speaker.user" : "project.history.speaker.assistant");
 }
 
 function HistoryPanel({
@@ -493,6 +501,7 @@ function HistoryPanel({
   detail,
   queryHistory,
   readHistory,
+  active = true,
   t,
 }: {
   readonly projectId: string;
@@ -505,8 +514,10 @@ function HistoryPanel({
     projectId: string,
     source: NativeProjectSource,
     opener?: HTMLElement,
+    keyword?: string,
   ) => Promise<void>;
   readonly t: Translate;
+  readonly active?: boolean;
 }): ReactNode {
   const [sessionId, setSessionId] = useState("");
   const [keyword, setKeyword] = useState("");
@@ -531,6 +542,7 @@ function HistoryPanel({
   const toInput = useRef<HTMLInputElement>(null);
   const epoch = useRef(0);
   const abortRef = useRef<AbortController>();
+  const readRecent = useRef(false);
   useEffect(() => () => { epoch.current++; abortRef.current?.abort(); }, [projectId]);
   const changed = (): void => {
     epoch.current++; abortRef.current?.abort();
@@ -581,12 +593,19 @@ function HistoryPanel({
     }
   };
 
+  // Opening history is a bounded read of recent chat, never a model request.
+  useEffect(() => {
+    if (!active || readRecent.current) return;
+    readRecent.current = true;
+    void search();
+  }, [projectId, active]);
+
   const open = async (item: ProjectHistorySearchItem, opener: HTMLElement): Promise<void> => {
     if (item.nativeSource === undefined) return;
     const current = epoch.current;
     setReadError(undefined);
     try {
-      await readHistory(projectId, item.nativeSource, opener);
+      await readHistory(projectId, item.nativeSource, opener, keyword.trim());
     } catch {
       if (current === epoch.current) setReadError({ item, opener });
     }
@@ -594,6 +613,7 @@ function HistoryPanel({
   const invalidHosts = new Set(unavailableResult?.unavailableSources?.map(source => source.hostSessionId) ?? []);
   const canContinue = resultDisposition === disposition
     && !result?.items.some(item => sourceInvalidation(detail, item.session.hostSessionId) !== undefined || invalidHosts.has(item.session.hostSessionId));
+  const readableItems = result?.items.filter(item => item.chat !== undefined && sourceInvalidation(detail, item.session.hostSessionId) === undefined && !invalidHosts.has(item.session.hostSessionId)) ?? [];
 
   return (
     <section
@@ -607,76 +627,82 @@ function HistoryPanel({
           void search();
         }}
       >
-        <label className="dsp-field">
-          {t("project.history.session")}
-          <Select aria-label={t("project.history.session")}
-            value={sessionId}
-            onValueChange={(value) => {
-              changed(); setSessionId(value);
-            }}
-          >
-            <option value="">{t("project.history.allSessions")}</option>
-            {detail.sessions.filter((session) => session.role === "main" || session.role === "execution").map((session) => (
-              <option key={session.id} value={session.id}>
-                {session.role === "main"
-                  ? t("project.main.label")
-                  : session.title}
-              </option>
-            ))}
-          </Select>
-        </label>
-        <label className="dsp-field">
-          {t("project.history.speaker")}
-          <Select aria-label={t("project.history.speaker")}
-            value={speaker}
-            onValueChange={(value) => {
-              changed(); setSpeaker(value as ProjectHistorySpeaker | "");
-            }}
-          >
-            <option value="">{speakerLabel("", t)}</option>
-            {(
-              [
-                "user",
-                "assistant",
-                "project-delivery",
-                "system",
-                "tool",
-                "unknown",
-              ] as const
-            ).map((value) => (
-              <option key={value} value={value}>
-                {speakerLabel(value, t)}
-              </option>
-            ))}
-          </Select>
-        </label>
-        <label className="dsp-field">
-          {t("project.history.keyword")}
-          <Input
-            value={keyword}
-            placeholder={t("project.history.keyword.placeholder")}
-            onChange={(event) => {
-              changed(); setKeyword(event.target.value);
-            }}
-          />
-        </label>
-        <label className="dsp-field">{t('project.history.fromTime')}<Input ref={fromInput} type="datetime-local" step="1" value={fromTime}
-          aria-invalid={timeError === "fromTime" || timeError === "range" || undefined}
-          aria-describedby={timeError === "fromTime" || timeError === "range" ? timeErrorId : undefined}
-          onChange={event => { changed(); setFromTime(event.target.value); }} /></label>
-        <label className="dsp-field">{t('project.history.toTime')}<Input ref={toInput} type="datetime-local" step="1" value={toTime}
-          aria-invalid={timeError === "toTime" || timeError === "range" || undefined}
-          aria-describedby={timeError === "toTime" || timeError === "range" ? timeErrorId : undefined}
-          onChange={event => { changed(); setToTime(event.target.value); }} />
-          {timeError !== undefined && <span id={timeErrorId} className="projects-ui__field-error" role="alert">
-            {t(timeError === "range" ? "project.history.invalidTimeRange" : "project.history.invalidLocalTime")}
-          </span>}
-        </label>
-        <div className="dsh-projects__history-form-actions">
+        <div className="dsh-projects__history-searchbar">
+          <label className="dsp-field dsh-projects__history-keyword">
+            {t("project.history.keyword")}
+            <Input
+              value={keyword}
+              placeholder={t("project.history.keyword.placeholder")}
+              onChange={(event) => {
+                changed(); setKeyword(event.target.value);
+              }}
+            />
+          </label>
           <Button variant="primary" size="sm" type="submit" disabled={loading}>
             {loading && <StateDot state="ongoing" />}
-            {loading ? t("project.history.searching") : t("project.history.search")}
+            {t("project.history.searchAction")}
           </Button>
+        </div>
+        <div className="dsh-projects__history-filters">
+          <label className="dsp-field">
+            {t("project.history.session")}
+            <Select aria-label={t("project.history.session")}
+              value={sessionId}
+              onValueChange={(value) => {
+                changed(); setSessionId(value);
+              }}
+            >
+              <option value="">{t("project.history.allSessions")}</option>
+              {detail.sessions.filter((session) => session.role === "main" || session.role === "execution").map((session) => (
+                <option key={session.id} value={session.id}>
+                  {session.role === "main"
+                    ? t("project.main.label")
+                    : session.title}
+                </option>
+              ))}
+            </Select>
+          </label>
+          <label className="dsp-field">
+            {t("project.history.speaker")}
+            <Select aria-label={t("project.history.speaker")}
+              value={speaker}
+              onValueChange={(value) => {
+                changed(); setSpeaker(value as ProjectHistorySpeaker | "");
+              }}
+            >
+              <option value="">{speakerLabel("", t)}</option>
+              {(
+                [
+                  "user",
+                  "assistant",
+                  "project-delivery",
+                ] as const
+              ).map((value) => (
+                <option key={value} value={value}>
+                  {speakerLabel(value, t)}
+                </option>
+              ))}
+            </Select>
+          </label>
+        </div>
+        <details className="dsh-projects__history-date-filters" open={timeError === undefined ? undefined : true}>
+          <summary>{t("project.history.dateFilter")}</summary>
+          <div className="dsh-projects__history-date-fields">
+          <label className="dsp-field">{t('project.history.fromTime')}<Input ref={fromInput} type="datetime-local" step="1" value={fromTime}
+            aria-invalid={timeError === "fromTime" || timeError === "range" || undefined}
+            aria-describedby={timeError === "fromTime" || timeError === "range" ? timeErrorId : undefined}
+            onChange={event => { changed(); setFromTime(event.target.value); }} /></label>
+          <label className="dsp-field">{t('project.history.toTime')}<Input ref={toInput} type="datetime-local" step="1" value={toTime}
+            aria-invalid={timeError === "toTime" || timeError === "range" || undefined}
+            aria-describedby={timeError === "toTime" || timeError === "range" ? timeErrorId : undefined}
+            onChange={event => { changed(); setToTime(event.target.value); }} />
+            {timeError !== undefined && <span id={timeErrorId} className="projects-ui__field-error" role="alert">
+              {t(timeError === "range" ? "project.history.invalidTimeRange" : "project.history.invalidLocalTime")}
+            </span>}
+          </label>
+          </div>
+        </details>
+        <div className="dsh-projects__history-form-actions">
           <Button variant="outline" size="sm" type="button" onClick={() => {
             changed(); setSessionId(""); setSpeaker(""); setKeyword(""); setFromTime(""); setToTime("");
           }}>{t("p3.history.reset")}</Button>
@@ -703,30 +729,26 @@ function HistoryPanel({
           )}
           {(result.unavailableSources ?? []).map(source => <p key={`${source.hostSessionId}:${source.sourceRevision}`}
             className="dsh-projects__history-meta" role="status"><Tag tone="warning">{unavailableSourceText(source.kind, t)}</Tag></p>)}
+          <div className="dsh-projects__history-results-heading">
+            <span>{t(keyword.trim() === "" ? "project.history.recent" : "project.history.results")}</span>
+            <span>{t("project.history.newestFirst")}</span>
+          </div>
           <div className="dsh-projects__record-list">
-            {result.items.filter(item => sourceInvalidation(detail, item.session.hostSessionId) === undefined && !invalidHosts.has(item.session.hostSessionId)).map((item) => {
+            {readableItems.map((item) => {
               const content = <>
+                <strong className="dsh-projects__history-result-title">{item.session.title}</strong>
                 <span className="dsh-projects__history-result-meta">
+                  <span className="dsh-projects__history-result-speaker">{historySpeakerText(item, t)}</span>
                   <time dateTime={new Date(item.time).toISOString()}>{formatUiDate(item.time, t)}</time>
-                  <span className="dsh-projects__history-result-speaker">{sourceRoleText(item, t)}</span>
-                  {item.recordPhase === "accepted" && <Tag>{t("project.history.phaseAccepted")}</Tag>}
-                  {item.recordPhase === "edited" && <Tag>{t("project.history.phaseEdited")}</Tag>}
-                  {item.recordPhase === "consumed" && <Tag>{t("project.history.phaseConsumed")}</Tag>}
                   {item.messageGroup !== undefined && !item.messageGroup.representativeIsLatest && <Tag>{t("project.history.earlierVersionMatch")}</Tag>}
-                  {item.partial && <Tag tone="warning">{t("project.history.partial")}</Tag>}
+                  {item.chat?.kind === "incomplete-reply" && <Tag tone="quiet">{t("project.history.savedFragmentLabel")}</Tag>}
                 </span>
-                <span className="dsh-projects__history-result-context">{item.session.title}
-                  {sourceSender(item, detail) === undefined ? "" : ` · ${t("project.history.sender", { value: sourceSender(item, detail)! })}`}
-                </span>
-                {item.messageGroup !== undefined && !item.messageGroup.representativeIsLatest && <span className="dsh-projects__history-result-context">
-                  {t('project.history.lastRecorded', { time: formatUiDate(item.messageGroup.latestRecordedTime, t) })}
-                </span>}
-                <span className={`dsh-projects__history-result-summary${item.nativeSource === undefined ? " dsh-projects__history-result-summary--unlinked" : ""}`}>{historySummaryText(item, t)}</span>
+                <span className={`dsh-projects__history-result-summary${item.nativeSource === undefined ? " dsh-projects__history-result-summary--unlinked" : ""}`}><HistoryTextMatch text={historySummaryText(item, t)} keyword={keyword} /></span>
               </>;
               const row = item.nativeSource === undefined
                 ? <article key={`${item.session.id}:${item.seq}:${item.kind}`} className="dsh-projects__history-result-row dsh-projects__history-result-row--unlinked">{content}</article>
                 : <ListRow key={`${item.session.id}:${item.seq}:${item.kind}`} className="dsh-projects__history-result-row"
-                  aria-label={t("p3.history.openResult", { session: item.session.title, role: sourceRoleText(item, t), time: formatUiDate(item.time, t) })}
+                  aria-label={t("p3.history.openResult", { session: item.session.title, role: historySpeakerText(item, t), time: formatUiDate(item.time, t) })}
                   onClick={event => { void open(item, event.currentTarget); }}
                   trailing={<IconChevronLeftOutlineRegular className="dsh-projects__entry-arrow" size={14} />}>{content}</ListRow>;
               return <div key={item.messageGroup?.versionsCursor ?? `${item.session.hostSessionId}:${item.seq}:${item.kind}:${item.messageId ?? item.toolCallId ?? ''}`}>
@@ -798,27 +820,26 @@ function HistoryMessageVersions({ projectId, item, queryHistory, open, t, onUnav
     } catch { if (current === epoch.current) setFailed(true); }
     finally { if (current === epoch.current) setLoading(false); }
   };
-  return <div className="dsh-projects__history-meta">
-    <Button variant="ghost" size="sm" type="button" aria-expanded={expanded}
-      icon={expanded ? <IconChevronDownOutlineRegular size={14} aria-hidden="true" /> : <IconChevronRightOutlineRegular size={14} aria-hidden="true" />} onClick={() => {
-      if (expanded) { epoch.current++; abortRef.current?.abort(); setLoading(false); setExpanded(false); }
-      else { setExpanded(true); if (result === undefined) void load(group.versionsCursor); }
-    }}>{t(expanded ? 'project.history.hideVersions' : 'project.history.showVersions', { count: String(group.versionCount) })}</Button>
+  return <details className="dsh-projects__history-versions" open={expanded} onToggle={event => {
+    const opening = event.currentTarget.open;
+    if (opening === expanded) return;
+    setExpanded(opening);
+    if (opening && result === undefined) void load(group.versionsCursor);
+    if (!opening) { epoch.current++; abortRef.current?.abort(); setLoading(false); }
+  }}>
+    <summary>{t('project.history.showVersions', { count: String(group.versionCount) })}</summary>
     {expanded && <section aria-label={t('project.history.versions')}>
       {loading && <LoadingState label={t('project.history.searching')} />}
       {failed && <ErrorState title={t('p3.history.error')} retry={() => { void load(result?.nextCursor ?? group.versionsCursor, result !== undefined); }} retryLabel={t('list.retry')} />}
-      {result?.items.map(version => <ListRow key={`${version.seq}:${version.kind}:${version.messageId ?? ''}`}
+      {result?.items.filter(version => version.chat !== undefined).map(version => <ListRow key={`${version.seq}:${version.kind}:${version.messageId ?? ''}`}
         className="dsh-projects__history-result-row" disabled={version.nativeSource === undefined}
         aria-label={t('project.history.openVersion', { phase: version.recordPhase ?? version.kind, time: formatUiDate(version.time, t) })}
         trailing={version.nativeSource === undefined ? undefined : <IconChevronLeftOutlineRegular className="dsh-projects__entry-arrow" size={14} aria-hidden="true" />}
         onClick={event => { void open(version, event.currentTarget); }}>
         <span className="dsh-projects__history-result-meta">
           <time dateTime={new Date(version.time).toISOString()}>{formatUiDate(version.time, t)}</time>
-          <Tag>{t(version.recordPhase === 'accepted' ? 'project.history.phaseAccepted' : version.recordPhase === 'edited' ? 'project.history.phaseEdited'
-            : version.recordPhase === 'consumed' ? 'project.history.phaseConsumed' : version.recordPhase === 'claimed' ? 'project.history.phaseClaimed'
-            : version.recordPhase === 'canceled' ? 'project.history.phaseCanceled' : 'project.history.phaseOther', { phase: version.recordPhase ?? version.kind })}</Tag>
           {version.matchesSearch && <Tag>{t('project.history.versionMatches')}</Tag>}
-          {version.partial && <Tag tone="warning">{t('project.history.partial')}</Tag>}
+          {version.chat?.kind === 'incomplete-reply' && <Tag tone="quiet">{t('project.history.savedFragmentLabel')}</Tag>}
         </span>
         <span className="dsh-projects__history-result-summary">{historySummaryText(version, t)}</span>
       </ListRow>)}
@@ -826,69 +847,9 @@ function HistoryMessageVersions({ projectId, item, queryHistory, open, t, onUnav
       {result?.nextCursor !== undefined && !loading && <Button variant="outline" size="sm" type="button"
         onClick={() => { void load(result.nextCursor!, true); }}>{t('project.history.nextVersions')}</Button>}
     </section>}
-  </div>;
+  </details>;
 }
 
-function HistoryReadPanel({
-  state,
-  detail,
-  t,
-  onLocate,
-  recorded = false,
-}: {
-  readonly state: HistoryReadPanelState;
-  readonly detail: ProjectDetail;
-  readonly t: Translate;
-  readonly onLocate?: (source: NativeProjectSource, read: ProjectHistoryReadResult) => void;
-  readonly recorded?: boolean;
-}): ReactNode {
-  const unavailable = sourceInvalidation(detail, state.source.hostSessionId);
-  const result = unavailable === undefined ? state.result : {
-    status: "unavailable" as const, found: false, items: [], limitations: [],
-    reason: unavailableSourceText(unavailable.kind, t),
-  };
-  if (recorded && result.status !== "unavailable" && result.found) {
-    const targets = result.items.filter(item => item.isTarget), context = result.items.filter(item => !item.isTarget);
-    const limitations = [...new Set([...result.limitations, ...targets.flatMap(item => item.limitations ?? [])])];
-    return <section className="dsh-projects__history-record-reader">
-      <VisibleItems items={targets} detail={detail} t={t} recorded />
-      <details className="dsh-projects__history-record-details">
-        <summary>{t("project.history.recordDetails")}</summary>
-        <section aria-label={t("project.history.originalRecord")}>
-          <h3>{t("project.history.originalRecord")}</h3>
-          {targets.map(item => <div key={`${item.seq}:${item.kind}`} className="dsh-projects__source-text" data-project-history-raw="">{item.text}</div>)}
-        </section>
-        {limitations.map(limitation => <p key={limitation} className="dsh-projects__history-meta">{limitation}</p>)}
-        {context.length > 0 && <section aria-label={t("project.history.surroundingRecords")}>
-          <h3>{t("project.history.surroundingRecords")}</h3>
-          <VisibleItems items={context} detail={detail} t={t} />
-        </section>}
-      </details>
-    </section>;
-  }
-  return (
-    <>
-      {result.status === "partial" && (
-        <p className="dsh-projects__history-meta" role="status"><Tag tone="warning">{t("project.history.partial")}</Tag></p>
-      )}
-      {result.status === "unavailable" ? (
-        <ErrorState title={result.reason ?? t("project.sources.unresolved")} />
-      ) : !result.found ? (
-        <EmptyState title={result.reason ?? t("project.sources.unresolved")} />
-      ) : (
-        <div className="dsh-projects__record">
-          <VisibleItems items={result.items} detail={detail} t={t} />
-          {onLocate !== undefined && result.items.some(item => item.isTarget) && <div className="dsh-projects__source-location"><Button variant="ghost" size="sm" type="button" onClick={() => onLocate(state.source, result)}>{t("p3.history.openOriginal")}</Button></div>}
-        </div>
-      )}
-      {result.limitations.map((limitation) => (
-        <p key={limitation} className="dsh-projects__history-meta">
-          {t("project.history.limitations", { value: limitation })}
-        </p>
-      ))}
-    </>
-  );
-}
 
 function ProjectList({
   projects, archived, nameQuery, t, busy, loading, readFailed, hasSnapshot, pendingRestoreProjectId, onRetry, onNameQuery, onArchiveFilter, onOpen, onAction,
@@ -1673,14 +1634,6 @@ export function ProjectsPanel({
   const [renameNotice, setRenameNotice] = useState("");
   const [showArchivedProjects, setShowArchivedProjects] = useState(false);
   const [projectNameQuery, setProjectNameQuery] = useState("");
-  const [titleUsageRead, setTitleUsageRead] = useState<{
-    readonly scope: string;
-    readonly value?: ProjectUsageResult;
-    readonly loading: boolean;
-    readonly failed: boolean;
-  }>();
-  const usageRef = useRef(usageActions);
-  usageRef.current = usageActions;
   const [busy, setBusy] = useState(false);
   const [lifecycleBusy, setLifecycleBusy] = useState(false);
   const lifecycleOperation = useRef<symbol>();
@@ -1747,44 +1700,6 @@ export function ProjectsPanel({
         result: { status: "unavailable", found: false, items: [], limitations: [], reason: unavailableSourceText(retired.kind, t) } };
     });
   }, [unavailableDisposition]);
-
-  const usageProjectId = screen.kind === "project" && projectDetail?.project.id === screen.projectId
-    ? screen.projectId : undefined;
-  const usageMembership = projectDetail?.sessions.map(item => `${item.id}:${projectCarrierIdentity(item)}:${item.carriers?.map(carrier => `${carrier.hostSessionId}:${carrier.sessionCreatedAt ?? "unknown"}`).join(",") ?? ""}`).join("|");
-  const usageScope = JSON.stringify([usageProjectId, usageMembership, unavailableDisposition]);
-  const titleUsage = titleUsageRead?.scope === usageScope ? titleUsageRead.value : undefined;
-  const titleUsageLoading = usageProjectId !== undefined && (titleUsageRead?.scope !== usageScope || titleUsageRead.loading);
-  const titleUsageError = titleUsageRead?.scope === usageScope && titleUsageRead.failed;
-  useEffect(() => {
-    let active = true;
-    let reading = false;
-    let refreshPending = false;
-    let abort: AbortController | undefined;
-    if (usageProjectId === undefined) return;
-    const refresh = (): void => {
-      // Finish this scope's admitted read. Later notifications request one fresh
-      // pass rather than repeatedly canceling it before any result can render.
-      if (reading) { refreshPending = true; return; }
-      reading = true;
-      refreshPending = false;
-      abort = new AbortController();
-      // 标题始终查询该项目全部历史；设置页筛选不参与此结果。
-      setTitleUsageRead(previous => ({ scope: usageScope, loading: true, failed: false,
-        ...(previous?.scope === usageScope && previous.value !== undefined ? { value: previous.value } : {}) }));
-      void usageRef.current.query({ projectId: usageProjectId }, abort.signal).then(value => {
-        if (!active) return;
-        if (value.projectId !== usageProjectId || value.query.projectId !== usageProjectId
-          || value.query.sessionId !== undefined || value.query.model !== undefined
-          || value.query.from !== undefined || value.query.to !== undefined) throw new Error(t("p5.panel.titleUsageScopeMismatch"));
-        setTitleUsageRead({ scope: usageScope, value, loading: false, failed: false });
-      }).catch(() => { if (active) setTitleUsageRead(previous => ({ scope: usageScope, loading: false, failed: true,
-        ...(previous?.scope === usageScope && previous.value !== undefined ? { value: previous.value } : {}) })); })
-        .finally(() => { reading = false; if (active && refreshPending) refresh(); });
-    };
-    refresh();
-    const unsubscribe = usageRef.current.subscribe?.(usageProjectId, refresh);
-    return () => { active = false; abort?.abort(); unsubscribe?.(); };
-  }, [usageProjectId, usageScope]);
 
   useEffect(() => {
     if (conversationFileRequest === undefined || screen.kind !== "project" || conversationFileRequest.projectId !== screen.projectId || conversationFileRequest.signal.aborted) return;
@@ -1890,7 +1805,7 @@ export function ProjectsPanel({
     }
     setVisibleConversation(projectNavigation.target.kind); setShowExecutionList(false); executionListFocus.current = false;
     setOverviewOpen(projectNavigation.target.source !== undefined);
-    setSideView(projectNavigation.target.source !== undefined ? "historyRead" : "sessions");
+    setSideView(projectNavigation.target.source !== undefined ? "sources" : "sessions");
     setFeedbackFocus(projectNavigation.target.source === undefined && projectNavigation.target.focusEventSeq === undefined
       ? projectNavigation.target.sessionId : undefined);
     setExecutionCreateOrigin(undefined);
@@ -2737,6 +2652,7 @@ export function ProjectsPanel({
     projectId: string,
     source: NativeProjectSource,
     opener?: HTMLElement,
+    keyword?: string,
   ): Promise<void> => {
     const focusOpener = opener ?? (document.activeElement instanceof HTMLElement ? document.activeElement : undefined);
     setSourceReadingReturn(undefined);
@@ -2744,13 +2660,20 @@ export function ProjectsPanel({
     const request = ++sourceRequest.current;
     sourceAbort.current?.abort();
     const abort = new AbortController(); sourceAbort.current = abort;
-    const result = await readHistory(projectId, { source, before: 1, after: 1 }, abort.signal);
-    if (epoch !== viewEpoch.current || request !== sourceRequest.current) return;
     sideOpeners.current.historyRead = focusOpener;
     sideFocusRequest.current = { view: "historyRead" };
-    setHistoryReadPanel({ source, result });
+    setHistoryReadPanel({ source, loading: true, keyword });
     setOverviewOpen(true);
     setSideView("historyRead");
+    try {
+      const result = await readHistory(projectId, { source, before: 2, after: 2 }, abort.signal);
+      if (epoch !== viewEpoch.current || request !== sourceRequest.current || abort.signal.aborted) return;
+      setHistoryReadPanel({ source, result, keyword });
+    } catch (error) {
+      if (epoch !== viewEpoch.current || request !== sourceRequest.current || abort.signal.aborted) return;
+      console.error("[dsh-projects] history context read failed", error);
+      setHistoryReadPanel({ source, failed: true, keyword });
+    }
   };
 
   useEffect(() => {
@@ -2761,7 +2684,8 @@ export function ProjectsPanel({
       || handledHistoryNavigation.current === projectNavigation.id) return;
     handledHistoryNavigation.current = projectNavigation.id;
     const epoch = viewEpoch.current;
-    const reading = readHistoryContext(screen.projectId, source);
+    // Explicit Memory/board/tool sources keep their original reader and raw-source policy.
+    const reading = openSources([source], "sessions");
     const request = sourceRequest.current, abort = sourceAbort.current;
     void reading.catch(() => {
       if (epoch === viewEpoch.current && request === sourceRequest.current
@@ -2981,12 +2905,6 @@ export function ProjectsPanel({
   const showHistory = sideView === "history";
   const showHistoryRead =
     sideView === "historyRead" && historyReadPanel !== undefined;
-  const recordedHistoryRead = showHistoryRead && historyReadPanel.source.kind === "native-event"
-    && isProjectUiRawRecordType(historyReadPanel.source.eventType);
-  const nativeHistoryRead = showHistoryRead && renderSourceConversation !== undefined && historyReadPanel?.source.kind === "native-event"
-    && !recordedHistoryRead
-    && historyReadPanel.result.found && historyReadPanel.result.status !== "unavailable"
-    && sourceInvalidation(detail, historyReadPanel.source.hostSessionId) === undefined;
   const openSessionFromSettings = (sessionId: string): void => {
     setSettingsWindow(undefined);
     scheduleDirty.current = false; setScheduleCloseConfirmation(false); setScheduleWindow(undefined);
@@ -3241,9 +3159,6 @@ export function ProjectsPanel({
               visible: splitConversations || visibleConversation === "main",
               focus: projectNavigation?.target.source === undefined && projectNavigation?.detail.project.id === detail.project.id && projectNavigation.target.kind === "main" && projectNavigation.target.sessionId === detail.project.mainSessionId && projectNavigation.target.focusEventSeq !== undefined ? { id: projectNavigation.id, eventSeq: projectNavigation.target.focusEventSeq, messageId: projectNavigation.target.focusMessageId } : undefined })}</ProjectConversationReady>
           </div>
-          <footer className="dsh-projects__conversation-footer"><small aria-label={t("p5.panel.mainUsageSummary")}><UsageSessionSummary translate={t} scope="session-history"
-                sessions={titleUsage?.projectId === detail.project.id ? titleUsage.sessions.filter(item => item.sessionId === detail.project.mainSessionId) : undefined}
-                loading={titleUsageLoading} failed={titleUsageError} /></small></footer>
         </section>
         {showExecutionChat && <section ref={executionRegion} tabIndex={-1}
           hidden={executionListVisible || !splitConversations && visibleConversation !== "execution"}
@@ -3284,9 +3199,6 @@ export function ProjectsPanel({
                   focus: projectNavigation?.target.source === undefined && projectNavigation?.detail.project.id === detail.project.id && projectNavigation.target.kind === "execution" && projectNavigation.target.sessionId === selectedExecution.id && projectNavigation.target.focusEventSeq !== undefined ? { id: projectNavigation.id, eventSeq: projectNavigation.target.focusEventSeq, messageId: projectNavigation.target.focusMessageId } : undefined })}</ProjectConversationReady>
               </div>
             )}
-          <footer className="dsh-projects__conversation-footer"><small aria-label={t("p5.panel.executionUsageSummary")}><UsageSessionSummary translate={t} scope="session-history"
-              sessions={titleUsage?.projectId === detail.project.id ? titleUsage.sessions.filter(item => item.sessionId === selectedExecution.id) : undefined}
-              loading={titleUsageLoading} failed={titleUsageError} /></small></footer>
         </section>}
         </div>
         {!overviewOpen ? null : (
@@ -3323,7 +3235,7 @@ export function ProjectsPanel({
               <div key={view} hidden role="tabpanel" id={`${sideTabsId}-${view}-panel`} aria-labelledby={`${sideTabsId}-${view}`} />)}
             {/* Leaf content keeps its existing reader/request owner; conversations live in the sibling workspace. */}
             <div ref={sideRegion} tabIndex={-1} className="dsh-projects__side-panel dsh-projects__overview-body" role="tabpanel" id={`${sideTabsId}-${sideTab}-panel`} aria-labelledby={`${sideTabsId}-${sideTab}`}>
-            {(showSources || showLibrary && librarySession === undefined || showHistory || showHistoryRead || sideView === "boardSource") && <header className="dsh-projects__side-head">
+            {(showSources || showLibrary && librarySession === undefined || showHistory || sideView === "boardSource") && <header className="dsh-projects__side-head">
               <h2 className="dsh-projects__side-title">{showSources || sideView === "boardSource" ? t("project.sources.title") : showLibrary ? t("project.library.title") : t("project.history.title")}</h2>
               {sideBackControl}
             </header>}
@@ -3355,6 +3267,7 @@ export function ProjectsPanel({
                 detail={detail}
                 queryHistory={queryHistory}
                 readHistory={readHistoryContext}
+                active={showHistory}
                 t={t}
               />
             </div>}
@@ -3369,29 +3282,37 @@ export function ProjectsPanel({
                 />
               </div>
             ) : showHistory ? null : showHistoryRead ? (
-              <div className={`dsh-projects__side-body${nativeHistoryRead ? " dsh-projects__side-body--history-reader" : ""}`}>
-                {nativeHistoryRead
-                  ? <>
-                    <header className="dsh-projects__history-reading-meta">
-                    {historyReadPanel.result.items.filter(item => item.isTarget).map(item => <Fragment key={`${item.seq}:${item.kind}`}>
-                      <SourceMetadata item={item} detail={detail} t={t} recorded />
-                      {item.partial && <p className="dsh-projects__history-record-notice" role="status">{t('project.history.partial')}</p>}
-                    </Fragment>)}
-                    {(historyReadPanel.result.status === 'partial' || historyReadPanel.result.limitations.length > 0) && <details className="dsh-projects__history-record-details">
-                      <summary>{t('project.history.recordDetails')}</summary>
-                      {historyReadPanel.result.status === 'partial' && <p className="dsh-projects__history-meta">{t('project.history.partial')}</p>}
-                      {historyReadPanel.result.limitations.map((limitation, index) => <p className="dsh-projects__history-meta" key={index}>{t('project.history.limitations', { value: limitation })}</p>)}
-                    </details>}
-                    </header>
-                    <div className="dsh-projects__history-reading-content">{renderSourceConversation(detail, historyReadPanel.source, { readOnly: true })}</div>
-                  </>
-                  : <HistoryReadPanel
-                    state={historyReadPanel}
-                    detail={detail}
-                    t={t}
-                    recorded={recordedHistoryRead}
-                    onLocate={recordedHistoryRead ? undefined : (source, read) => { void locateSource(source, read); }}
-                  />}
+              <div className={`dsh-projects__side-body${historyReadPanel.attachmentSource === undefined ? "" : " dsh-projects__side-body--history-reader"}`}>
+                <div hidden={historyReadPanel.attachmentSource !== undefined}>
+                  <HistoryConversationReader
+                    source={historyReadPanel.source} result={historyReadPanel.result}
+                    loading={historyReadPanel.loading} failed={historyReadPanel.failed}
+                    detail={detail} keyword={historyReadPanel.keyword} t={t}
+                    onBack={() => {
+                      sourceRequest.current++; sourceAbort.current?.abort();
+                      sideFocusRequest.current = { view: "history", target: sideOpeners.current.historyRead };
+                      setSideView("history");
+                    }}
+                    onRetry={() => { void readHistoryContext(detail.project.id, historyReadPanel.source, sideOpeners.current.historyRead, historyReadPanel.keyword); }}
+                    onEnter={sessionId => openReplySession({ projectId: detail.project.id, sessionId })}
+                    readPage={(source, start, signal) => readHistory(detail.project.id, { source, before: 0, after: 0, chatTextStart: start }, signal)}
+                    onViewAttachments={renderSourceConversation === undefined ? undefined : (source, opener) => {
+                      setHistoryReadPanel(current => current === undefined ? current : { ...current, attachmentSource: source, attachmentOpener: opener });
+                    }}
+                  />
+                </div>
+                {historyReadPanel.attachmentSource !== undefined && <>
+                  <header className="dsh-projects__history-context-actions dsh-projects__history-reading-meta">
+                    <Button variant="ghost" size="sm" icon={<IconChevronLeftOutlineRegular size={14} />} onClick={() => {
+                      const opener = historyReadPanel.attachmentOpener;
+                      flushSync(() => setHistoryReadPanel(current => current === undefined ? current : { ...current, attachmentSource: undefined, attachmentOpener: undefined }));
+                      opener?.focus({ preventScroll: true });
+                    }}>{t("project.history.backToMessage")}</Button>
+                  </header>
+                  {sourceInvalidation(detail, historyReadPanel.attachmentSource.hostSessionId) !== undefined
+                    ? <ErrorState title={unavailableSourceText(sourceInvalidation(detail, historyReadPanel.attachmentSource.hostSessionId)!.kind, t)} />
+                    : <div className="dsh-projects__history-reading-content">{renderSourceConversation?.(detail, historyReadPanel.attachmentSource, { readOnly: true })}</div>}
+                </>}
               </div>
             ) : sideView === "conversationFile" && conversationReading !== undefined ? (
               <div className="dsh-projects__side-body dsh-projects__side-body--reader dsh-projects__side-body--flush">

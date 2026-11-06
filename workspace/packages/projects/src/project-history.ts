@@ -10,6 +10,7 @@ import {
   iterateNativeProjectVisibleEvents,
   boundNativeProjectSourceItem,
   readRetainedProjectSource,
+  readNativeProjectSourceFromDirectory,
   readRetainedProjectNativePrefix,
   readRetainedProjectNativeDirectory,
   prepareNativeProjectDirectory,
@@ -17,6 +18,7 @@ import {
   selectNativeProjectVisibleDirectoryEvents,
   visitNativeProjectVisibleDirectoryEvents,
   type RetainedNativeDirectory,
+  type PreparedNativeProjectDirectory,
   projectSourceUnavailableReason,
   type ProjectSessionSourceReader,
   type NativeProjectSourceItem,
@@ -42,6 +44,7 @@ import { isProjectVisibleLocator } from './query-directory.ts';
 import { projectRecordSemanticType } from './stock/recording/records.ts';
 import type { ProjectRecordLocator } from './stock/persistence/types.ts';
 import type { CommunicationSavedPartSource } from './communication/types.ts'
+import { projectChatGroups, projectChatItem, boundChatItem, type ProjectChatGroup } from './project-chat-projection.ts';
 
 /** Default number of visible history entries returned by one bounded page. */
 export const PROJECT_HISTORY_DEFAULT_LIMIT = 20;
@@ -58,6 +61,8 @@ import type { ProjectHistoryStatus, ProjectHistorySpeaker, ProjectHistoryMembers
 interface FixedQuery {
   /** Server-side UI choice only; never accepted from a request or encoded in cursors. */
   readonly displaySummary?: boolean;
+  /** Trusted UI view identity, bound to its cursor and never accepted from request fields. */
+  readonly chatView?: 'chat/v1';
   readonly sessionIds?: readonly string[] | undefined;
   readonly hostSessionIds?: readonly string[] | undefined;
   readonly producer?: string | undefined;
@@ -140,7 +145,7 @@ export class ProjectHistoryReader {
     request: ProjectHistorySearchRequest,
     signal?: AbortSignal,
     captureSamePage?: (read: (signal?: AbortSignal) => Promise<ProjectHistorySearchResult>) => void,
-    presentation: { readonly displaySummary?: boolean } = {},
+    presentation: { readonly displaySummary?: boolean; readonly chat?: boolean } = {},
   ): Promise<ProjectHistorySearchResult> {
     signal?.throwIfAborted();
     const cursor = request.cursor === undefined ? undefined : decodeCursor(request.cursor);
@@ -150,11 +155,12 @@ export class ProjectHistoryReader {
     if (cursor !== undefined && cursor.projectId !== projectId) {
       return unavailableSearch("history cursor belongs to a different project");
     }
+    if (cursor !== undefined && (cursor.query.chatView === 'chat/v1') !== (presentation.chat === true)) return unavailableSearch('history cursor belongs to a different history view');
     const normalizedQuery = cursor === undefined
       ? normalizeInitialQuery(request)
       : queryFromCursorRequest(request, cursor.query);
     if (typeof normalizedQuery === "string") return unavailableSearch(normalizedQuery);
-    const normalized: FixedQuery = { ...normalizedQuery, displaySummary: presentation.displaySummary === true };
+    const normalized: FixedQuery = { ...normalizedQuery, displaySummary: presentation.displaySummary === true, ...(presentation.chat === true ? { chatView: 'chat/v1' as const } : {}) };
 
     const membership = await this.memberships(projectId, signal);
     if (membership === undefined) return unavailableSearch("project membership is unavailable");
@@ -202,7 +208,11 @@ export class ProjectHistoryReader {
     projectId: string,
     request: ProjectHistoryReadRequest,
     signal?: AbortSignal,
+    presentation: { readonly chat?: boolean } = {},
   ): Promise<ProjectHistoryReadResult> {
+    if (request.chatTextStart !== undefined && (presentation.chat !== true || !Number.isSafeInteger(request.chatTextStart) || request.chatTextStart < 0)) {
+      return { status: 'unavailable', found: false, items: [], limitations: [], reason: 'invalid chat text range', code: 'invalid-range' };
+    }
     if (request.source.kind === 'communication-part') {
       if ((request.before ?? 0) !== 0 || (request.after ?? 0) !== 0) return {status:'unavailable',found:false,items:[],limitations:['A saved communication part has no native adjacent-message window.'],code:'invalid-source'};
       return this.readSavedPart(projectId, request.source, signal);
@@ -224,6 +234,10 @@ export class ProjectHistoryReader {
         items: [],
         limitations: ["source is outside the current project membership"],
       };
+    }
+    if (presentation.chat === true) {
+      try { return await this.readChat(projectId, request, membership, before, after, signal); }
+      catch { signal?.throwIfAborted(); return { status: 'unavailable', found: false, items: [], limitations: ['source session is unavailable'] }; }
     }
     try {
       signal?.throwIfAborted();
@@ -253,6 +267,92 @@ export class ProjectHistoryReader {
         limitations: ["source session is unavailable"],
       };
     }
+  }
+
+  private async readChat(projectId: string, request: ProjectHistoryReadRequest, membership: readonly ProjectHistoryMembership[], before: number, after: number,
+    signal?: AbortSignal): Promise<ProjectHistoryReadResult> {
+    if (request.source.kind === 'communication-part') return this.readSavedPart(projectId, request.source, signal);
+    const source = request.source;
+    const current = membership.find(member => member.hostSessionId === source.hostSessionId)!;
+    const sequence = current.carrierSequence ?? current.carrierIndex;
+    const contexts: Array<{ member: ProjectHistoryMembership; directory: Extract<RetainedNativeDirectory, { readable: true }>; preparation: PreparedNativeProjectDirectory; groups: ProjectChatGroup[]; selected: NativeProjectSourceItem[] }> = [];
+    const limitations: string[] = [];
+    const load = async (member: ProjectHistoryMembership) => {
+      const existing = contexts.find(value => value.member.hostSessionId === member.hostSessionId); if (existing !== undefined) return existing;
+      const directory = await readRetainedProjectNativeDirectory(this.ctx, projectId, member.hostSessionId, this.readSessionSource, { signal, assertAdmitting: this.assertSourceAdmitting });
+      if (!directory.readable) { limitations.push(`相邻会话记录不可读：${member.title}`); return undefined; }
+      const preparation = prepareNativeProjectDirectory(directory, signal, true);
+      const groups = projectChatGroups(preparation, prepareNativeProjectDirectoryRelations(preparation, signal).metadata);
+      const context = { member, directory, preparation, groups, selected: [] as NativeProjectSourceItem[] }; contexts.push(context); return context;
+    };
+    const own = await load(current);
+    if (own === undefined) return { status: 'unavailable', found: false, items: [], limitations };
+    let invalidRange = false;
+    const exact = await own.directory.withOperation(async () => {
+      const read = await readNativeProjectSourceFromDirectory(own.directory, source, { before: 0, after: 0, fullBody: true, signal });
+      if (!read.resolved) return read;
+      for (const target of read.items.filter(item => item.isTarget)) {
+        const projected = await projectChatItem(own.directory, target);
+        if (projected !== undefined) {
+          if ((request.chatTextStart ?? 0) > projected.chat!.excerpt.total) { invalidRange = true; break; }
+          own.selected.push(boundChatItem(boundNativeProjectSourceItem(projected), 4096, request.chatTextStart ?? 0));
+        }
+      }
+      await own.directory.revalidate(); return read;
+    });
+    if (!exact.resolved) return { status: exact.code === 'not-found' ? 'ok' : 'unavailable', found: false, items: [], limitations: [], reason: exact.reason, code: exact.code };
+    if (invalidRange) return { status: 'unavailable', found: false, items: [], limitations: [], reason: 'chat text offset is past the exact message', code: 'invalid-range' };
+    const targets = own.selected.filter(item => item.isTarget);
+    if (targets.length === 0) return { status: 'ok', found: false, items: [], limitations: [], reason: '该原始记录不属于聊天消息。' };
+    const first = Math.min(...targets.map(item => item.seq)), last = Math.max(...targets.map(item => item.seq));
+    const sameMessage = (group: ProjectChatGroup) => targets.some(item => group.seqs.includes(item.seq)
+      || item.messageId !== undefined && item.messageId === group.messageId || item.attemptId !== undefined && item.attemptId === group.attemptId);
+    for (const direction of [-1, 1]) {
+      let needed = direction < 0 ? before : after, index = sequence;
+      let context: typeof own | undefined = own;
+      while (needed > 0 && context !== undefined) {
+        const groups = context.groups.filter(group => context !== own || !sameMessage(group) && (direction < 0 ? group.latestSeq < first : group.latestSeq > last))
+          .sort((left, right) => direction < 0 ? right.latestSeq - left.latestSeq : left.latestSeq - right.latestSeq);
+        for (const group of groups) {
+          signal?.throwIfAborted();
+          const item = await latestChatGroupItem(context.directory, context.preparation, group, signal);
+          if (item === undefined) continue;
+          context.selected.push(boundChatItem(boundNativeProjectSourceItem(item))); if (--needed === 0) break;
+        }
+        if (needed === 0 || index === undefined) break;
+        index += direction;
+        const member = membership.find(member => member.id === current.id && (member.carrierSequence ?? member.carrierIndex) === index);
+        context = member === undefined ? undefined : await load(member);
+      }
+    }
+    let toolBudget = 16384, toolCount = 0;
+    for (const context of contexts) {
+      if (context.selected.length === 0) continue;
+      const start = Math.min(...context.selected.map(item => item.seq)), end = Math.max(...context.selected.map(item => item.seq));
+      const tools = context.preparation.records.filter(record => record.seq >= start && record.seq <= end && projectRecordSemanticType(record.type).includes('tool'));
+      for (const record of tools) {
+        if (toolCount >= 20 || toolBudget <= 0) {
+          const lastTool = context.selected.findLast(item => item.role === 'tool' && item.chat === undefined);
+          if (lastTool !== undefined) context.selected[context.selected.indexOf(lastTool)] = { ...lastTool, limitations: unique([...(lastTool.limitations ?? []), '工具过程仅显示当前消息窗口内的有限保存内容。']) };
+          break;
+        }
+        const entries = await selectNativeProjectVisibleDirectoryEvents(context.directory, new Set([record.seq]), signal, context.preparation);
+        for (const entry of entries) {
+          if (entry.item.role !== 'tool' || context.selected.some(item => item.seq === entry.item.seq && item.kind === entry.item.kind)) continue;
+          // A business send is already represented by its selected chat message, never a second tool row.
+          if (entry.item.communicationContent !== undefined) continue;
+          const bounded = boundNativeProjectSourceItem(entry.item, Math.min(4096, toolBudget));
+          context.selected.push(bounded); toolBudget -= codePointLength(bounded.text); toolCount++;
+          if (toolCount >= 20 || toolBudget <= 0) break;
+        }
+      }
+      await context.directory.revalidate();
+    }
+    const ordered = contexts.sort((left, right) => (left.member.carrierSequence ?? left.member.carrierIndex ?? 0) - (right.member.carrierSequence ?? right.member.carrierIndex ?? 0));
+    const items = ordered.flatMap(context => context.selected.sort((left, right) => left.seq - right.seq));
+    const missing = items.filter(item => item.visibleComplete === false).flatMap(item => item.limitations ?? []);
+    return { status: limitations.length > 0 || missing.length > 0 ? 'partial' : 'ok', found: true, items,
+      limitations: unique([...limitations, ...missing]), coverage: ordered.filter(context => context.selected.length > 0).map(context => coverageFor(context.member, context.selected)) };
   }
 
   private async adjacentCarriers(projectId: string, membership: readonly ProjectHistoryMembership[], hostSessionId: string,
@@ -514,9 +614,9 @@ function pageSearch(
         message: { hostSessionId: entry.position.hostSessionId, messageId: entry.group.messageId }, projectId, query,
         cuts: cuts.filter(cut => cut.hostSessionId === entry.position.hostSessionId) }) } };
   });
-  const itemLimitations = renderedItems.flatMap(item => item.limitations ?? []);
+  const itemLimitations = renderedItems.filter(item => query.chatView !== 'chat/v1' || item.visibleComplete === false).flatMap(item => item.limitations ?? []);
   const allLimitations = unique([...limitations, ...itemLimitations]);
-  const partial = allLimitations.length > 0 || renderedItems.some(item => item.partial === true);
+  const partial = allLimitations.length > 0 || renderedItems.some(item => query.chatView === 'chat/v1' ? item.visibleComplete === false : item.partial === true);
   const status: ProjectHistoryStatus = sourceRead.readableSources === 0 && sourceRead.unavailableSources.length > 0
     ? "unavailable"
     : continuation && allLimitations.length > 0 ? "partial"
@@ -666,10 +766,10 @@ function appendProjectedItems(
 function matchesQuery(item: NativeProjectSourceItem, query: FixedQuery): boolean {
   if (query.fromTime !== undefined && item.time < query.fromTime) return false;
   if (query.toTime !== undefined && item.time > query.toTime) return false;
-  if (query.speaker !== undefined && item.speaker !== query.speaker) return false;
+  if (query.speaker !== undefined && (query.chatView === 'chat/v1' && item.chat?.kind === 'communication' ? 'project-delivery' : item.speaker) !== query.speaker) return false;
   if (query.producer !== undefined && item.sourceKind !== query.producer) return false;
   if (query.recordKinds !== undefined && !query.recordKinds.includes(item.kind)) return false;
-  return query.keyword === undefined || item.text.toLowerCase().includes(query.keyword.toLowerCase());
+  return query.keyword === undefined || (query.chatView === 'chat/v1' ? item.chat?.text ?? '' : item.text).toLowerCase().includes(query.keyword.toLowerCase());
 }
 
 async function directorySourceCut(membership: ProjectHistoryMembership, sourceRevision: number,
@@ -763,10 +863,86 @@ function historyPosition(entry: NativeProjectVisibleEvent, hostSessionId: string
     id: `${entry.item.seq}:${entry.item.messageId ?? entry.item.toolCallId ?? ''}` };
 }
 
+async function latestChatGroupItem(directory: Extract<RetainedNativeDirectory, { readable: true }>, preparation: PreparedNativeProjectDirectory,
+  group: ProjectChatGroup, signal?: AbortSignal): Promise<NativeProjectSourceItem | undefined> {
+  for (const seq of [...group.seqs].sort((left, right) => preparation.bySeq.get(right)!.time - preparation.bySeq.get(left)!.time || right - left)) {
+    const entries = await selectNativeProjectVisibleDirectoryEvents(directory, new Set([seq]), signal, preparation);
+    for (const entry of entries) {
+      if (group.messageId !== undefined && entry.item.messageId !== group.messageId) continue;
+      const projected = await projectChatItem(directory, entry.item); if (projected !== undefined) return projected;
+    }
+  }
+  return undefined;
+}
+
+/** Separate trusted view over the same cut and exact bodies; raw/Model/Bot grouping remains untouched. */
+async function appendChatDirectoryItems(destination: OrderedHistoryItem[], membership: ProjectHistoryMembership,
+  directory: Extract<RetainedNativeDirectory, { readable: true }>, query: FixedQuery, after?: HistoryPosition, signal?: AbortSignal,
+  selectedMessage?: { readonly hostSessionId: string; readonly messageId: string }): Promise<boolean> {
+  if (selectedMessage !== undefined && selectedMessage.hostSessionId !== membership.hostSessionId) return false;
+  const retained: OrderedHistoryItem[] = [];
+  const anchor = await directory.withOperation(async () => {
+    const preparation = prepareNativeProjectDirectory(directory, signal, true), relations = prepareNativeProjectDirectoryRelations(preparation, signal);
+    const positionFor = (seq: number, messageId?: string): HistoryPosition => {
+      const locator = preparation.bySeq.get(seq)!;
+      return { time: locator.time, hostSessionId: membership.hostSessionId, eventIndex: seq, kind: projectRecordSemanticType(locator.type), id: `${seq}:${messageId ?? (typeof locator.facts.callId === 'string' ? locator.facts.callId : '')}` };
+    };
+    const groups = projectChatGroups(preparation, relations.metadata).filter(group => selectedMessage === undefined || group.messageId === selectedMessage.messageId)
+      .sort((left, right) => comparePosition(positionFor(left.latestSeq, left.messageId), positionFor(right.latestSeq, right.messageId)));
+    let anchorPresent = after === undefined;
+    if (selectedMessage !== undefined) {
+      const group = groups[0]; if (group === undefined) return false;
+      for (const seq of [...group.seqs].sort((left, right) => comparePosition(positionFor(left, group.messageId), positionFor(right, group.messageId)))) {
+        const position = positionFor(seq, group.messageId);
+        if (after !== undefined) { const compared = comparePosition(position, after); if (compared === 0) anchorPresent = true; if (compared <= 0) continue; }
+        const entries = await selectNativeProjectVisibleDirectoryEvents(directory, new Set([seq]), signal, preparation);
+        for (const entry of entries) {
+          if (entry.item.messageId !== group.messageId) continue;
+          const item = await projectChatItem(directory, entry.item); if (item === undefined) continue;
+          retained.push({ position, item: { ...searchExcerpt({ ...item, session: membership }, query), matchesSearch: matchesQuery(item, query) } });
+        }
+        if (retained.length >= query.limit + 1) break;
+      }
+    } else {
+      for (const group of groups) {
+        signal?.throwIfAborted();
+        const position = positionFor(group.latestSeq, group.messageId);
+        if (after !== undefined) { const compared = comparePosition(position, after); if (compared === 0) anchorPresent = true; if (compared <= 0) continue; }
+        let representative: NativeProjectSourceItem | undefined;
+        for (const seq of [...group.seqs].sort((left, right) => comparePosition(positionFor(left, group.messageId), positionFor(right, group.messageId)))) {
+          const entries = await selectNativeProjectVisibleDirectoryEvents(directory, new Set([seq]), signal, preparation);
+          for (const entry of entries) {
+            if (group.messageId !== undefined && entry.item.messageId !== group.messageId) continue;
+            const item = await projectChatItem(directory, entry.item);
+            if (item !== undefined && matchesQuery(item, query)) { representative = item; break; }
+          }
+          if (representative !== undefined) break;
+        }
+        if (representative === undefined) continue;
+        const latest = preparation.bySeq.get(group.latestSeq)!;
+        retained.push({ position, item: searchExcerpt({ ...representative, session: membership }, query), ...(group.messageId === undefined ? {} : {
+          group: { messageId: group.messageId, versionCount: group.seqs.length,
+            latestSource: decodeNativeEventSource({ kind: 'native-event', version: 1, projectId: directory.projectId, sessionId: directory.sessionId,
+              hostSessionId: directory.hostSessionId, sessionCreatedAt: directory.sessionCreatedAt, eventSpace: { kind: 'canonical', formatVersion: directory.formatVersion },
+              eventSeq: latest.seq, eventType: latest.type, eventDigest: latest.eventDigest, messageId: group.messageId }),
+            latestRecordPhase: group.entries.find(entry => entry.item.seq === group.latestSeq)?.item.recordPhase,
+            representativeIsLatest: representative.seq === group.latestSeq },
+        }) });
+        if (retained.length >= query.limit + 1) break;
+      }
+    }
+    const decorate = relations.decorate();
+    for (let index = 0; index < retained.length; index++) retained[index] = { ...retained[index]!, item: { ...retained[index]!.item, ...decorate(retained[index]!.item) } };
+    await directory.revalidate(); return anchorPresent;
+  });
+  destination.push(...retained); return anchor;
+}
+
 /** Group boundaries come from metadata, so a continuation never has to re-read earlier message bodies. */
 async function appendGroupedDirectoryItems(destination: OrderedHistoryItem[], membership: ProjectHistoryMembership,
   directory: Extract<RetainedNativeDirectory, { readable: true }>, query: FixedQuery, after?: HistoryPosition, signal?: AbortSignal,
   selectedMessage?: { readonly hostSessionId: string; readonly messageId: string }): Promise<boolean> {
+  if (query.chatView === 'chat/v1') return appendChatDirectoryItems(destination, membership, directory, query, after, signal, selectedMessage);
   if (selectedMessage !== undefined && selectedMessage.hostSessionId !== membership.hostSessionId) return false;
   const retained: OrderedHistoryItem[] = [];
   const anchorPresent = await directory.withOperation(async () => {
@@ -971,6 +1147,7 @@ function validCursor(value: unknown): value is HistoryCursor {
 
 function validFixedQuery(value: Record<string, unknown>): boolean {
   const sessionIds = value.sessionIds;
+  if (value.chatView !== undefined && value.chatView !== 'chat/v1') return false;
   if (value.hostSessionIds !== undefined && (!Array.isArray(value.hostSessionIds) || uniqueStrings(value.hostSessionIds) === undefined)) return false;
   if (value.recordKinds !== undefined && (!Array.isArray(value.recordKinds) || uniqueStrings(value.recordKinds) === undefined)) return false;
   if (value.producer !== undefined && typeof value.producer !== "string" || value.timeField !== undefined && value.timeField !== "recorded") return false;
@@ -1022,6 +1199,18 @@ function unique(values: readonly string[]): string[] {
 }
 
 function searchExcerpt(item: ProjectHistorySearchItem, query: FixedQuery): ProjectHistorySearchItem {
+  if (query.chatView === 'chat/v1' && item.chat !== undefined) {
+    const raw = searchExcerpt(item, { ...query, chatView: undefined, displaySummary: false, keyword: undefined });
+    const text = item.chat.text, keyword = query.keyword?.toLowerCase(), offset = keyword === undefined ? -1 : text.toLowerCase().indexOf(keyword);
+    const match = offset < 0 ? undefined : originalMatchRange(text, offset, offset + keyword!.length);
+    const total = codePointLength(text), start = Math.max(0, (match?.start ?? 0) - 64), end = Math.min(total, start + PROJECT_HISTORY_EXCERPT_MAX);
+    const { visibleBlocks: _blocks, ...chat } = item.chat;
+    let communication = chat.communication;
+    if (communication !== undefined) { const { parts: _parts, ...routing } = communication; communication = routing; }
+    const summary = query.displaySummary ? historyDisplaySummary(text, match?.start ?? 0, PROJECT_HISTORY_EXCERPT_MAX, query.keyword, item.partial === true) : undefined;
+    return { ...raw, chat: { ...chat, ...(communication === undefined ? {} : { communication }), text: sliceCodePoints(text, start, end), excerpt: { unit: 'unicode-code-points', start, end, total } },
+      ...(summary === undefined ? {} : { displaySummary: summary }), ...(match === undefined ? {} : { match: { method: 'literal-case-insensitive', field: 'chat.text', ...match } }) };
+  }
   const keyword = query.keyword?.toLowerCase();
   const offset = keyword === undefined ? -1 : item.text.toLowerCase().indexOf(keyword);
   const match = offset < 0 ? undefined : originalMatchRange(item.text, offset, offset + keyword!.length);

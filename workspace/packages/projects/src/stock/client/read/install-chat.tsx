@@ -20,7 +20,6 @@ import type { ProjectFocusOwner, ProjectFocusTarget } from './focus.ts'
 export interface InstallProjectChatOptions {
   readonly fileReader: ProjectFileReaderOwner
   readonly focusOwner?: ProjectFocusOwner
-  readonly allowBranch: false
   /** Resolve the actual work-role owner of the presented physical Session; absent for children and Bots. */
   readonly replySessionLinkSource?: ((hostSessionId: string) => ProjectReplyLinkSource | undefined) | undefined
   readonly renderCommunicationMessage?: (presentation: ProjectCommunicationMessagePresentation) => ReactNode
@@ -82,6 +81,5 @@ export function createProjectChatFocusRegistration(ctx: Context, binding: Sessio
 }
 
 export function installProjectChat(ctx: Context, options: InstallProjectChatOptions): void {
-  if (options.allowBranch !== false) throw new Error('Projects Chat does not support branching')
   apply(ctx, options)
 }

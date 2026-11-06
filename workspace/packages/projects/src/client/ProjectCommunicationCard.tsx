@@ -224,7 +224,7 @@ function Facts({ saved, t }: { saved: Saved } & Locale) {
       {saved.facts.admissionPersistence !== undefined && <p>{t('p3.cards.communication.admissionSave', { value: t(`communication.persistence.${saved.facts.admissionPersistence}`) })}</p>}
       <p>{t(`communication.wakeup.${saved.facts.wakeup}`)}</p>
     </div>}
-    {saved.result !== 'delivered' && <p>{t('p3.cards.communication.readingUnconfirmed')}{t('p5.common.semicolon')}{t('p3.cards.communication.completionUnconfirmed')}</p>}
+    <p>{t('p3.cards.communication.readingUnconfirmed')}{t('p5.common.semicolon')}{t('p3.cards.communication.completionUnconfirmed')}</p>
     {saved.failure !== undefined && <p className="dsh-project-feedback__error">{saved.failure.message}</p>}
     {saved.facts?.error !== undefined && <p className="dsh-project-feedback__error">{saved.facts.error.message}</p>}
   </div>

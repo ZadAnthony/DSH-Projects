@@ -1,6 +1,6 @@
 /** Browser-safe native source DTOs; no host reader or persistence implementation. */
 import type { ScheduleManager } from './features/schedule/contract.ts'
-import type { CommunicationSavedPartSource, CommunicationVisibleBlock, CommunicationVisibleRead } from './communication/types.ts'
+import type { CommunicationSavedPartSource, CommunicationVisibleBlock, CommunicationVisibleRead, CommunicationPartV1 } from './communication/types.ts'
 import type { CommunicationContentDirectory } from './communication/content-types.ts'
 
 /** A stored Project source whose original DSH event can be reopened without resuming its Agent. */
@@ -74,6 +74,28 @@ export interface NativeProjectSourceItem {
   readonly kind: string;
   readonly role: "user" | "assistant" | "tool" | "system";
   readonly text: string;
+  /** Transient UI chat view; never the original body's or source locator's coordinate space. */
+  readonly chat?: {
+    readonly kind: 'message' | 'incomplete-reply' | 'communication';
+    readonly text: string;
+    /** A verified visible file/image descriptor exists; this does not assert attachment-byte readability. */
+    readonly hasAttachments?: true;
+    readonly visibleBlocks?: readonly CommunicationVisibleBlock[];
+    readonly excerpt: { readonly unit: 'unicode-code-points'; readonly start: number; readonly end: number; readonly total: number };
+    readonly communication?: {
+      readonly direction: 'sent' | 'received';
+      readonly sender: { readonly sessionId: string; readonly title?: string };
+      readonly recipient: { readonly sessionId: string; readonly title?: string };
+      /** Saved preparation and received copy are not proof of delivery/consumption completion. */
+      readonly savedPhase: 'prepared' | 'received';
+      /** Actual saved authorship sections, in full chat.text Unicode coordinates (never canonical-JSON ranges). */
+      readonly parts?: readonly {
+        readonly group: 'agent' | 'user-message';
+        readonly speaker: CommunicationPartV1['originalSpeaker'];
+        readonly range: { readonly unit: 'unicode-code-points'; readonly start: number; readonly end: number };
+      }[];
+    };
+  };
   /** Ordered native visible data, before the compatibility text/attachment summary. */
   readonly visibleBlocks?: readonly CommunicationVisibleBlock[];
   readonly visibleComplete?: boolean;

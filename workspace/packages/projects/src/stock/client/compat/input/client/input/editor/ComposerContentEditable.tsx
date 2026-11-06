@@ -11,6 +11,7 @@ export interface ComposerContentEditableProps extends HTMLAttributes<HTMLDivElem
 /** Resident DOM roots survive physical SessionProvider teardown without exporting editor state. */
 const residentRoots = new WeakMap<LexicalEditor, HTMLDivElement>()
 const parkedSelection = new WeakMap<LexicalEditor, BaseSelection>()
+const parkedFocus = new WeakMap<LexicalEditor, boolean>()
 const managedStyles = new WeakMap<LexicalEditor, Set<string>>()
 
 export function ComposerContentEditable({ editor, editable, ...rest }: ComposerContentEditableProps): ReactNode {
@@ -29,13 +30,28 @@ export function ComposerContentEditable({ editor, editable, ...rest }: ComposerC
     const host = mount.current
     host.appendChild(root)
     const selection = parkedSelection.get(editor)
-    if (selection !== undefined) editor.update(() => { $setSelection(selection.clone()) }, { discrete: true, tag: SKIP_DOM_SELECTION_TAG })
+    const active = root.ownerDocument.activeElement
+    const restoreOwnedFocus = parkedFocus.get(editor) === true && editable
+      && (active === root.ownerDocument.body || active === root.ownerDocument.documentElement || active === root)
+      && root.closest('[hidden], [inert], [aria-hidden="true"]') === null
+    parkedFocus.delete(editor)
+    parkedSelection.delete(editor)
+    if (selection !== undefined) {
+      // Removing a focused DOM root collapses the browser Range. Restore both
+      // faces only for its still-visible focus owner; background mounts remain inert.
+      if (restoreOwnedFocus) root.focus({ preventScroll: true })
+      editor.update(() => { $setSelection(selection.clone()) }, {
+        discrete: true, ...restoreOwnedFocus ? {} : { tag: SKIP_DOM_SELECTION_TAG },
+      })
+      if (restoreOwnedFocus) editor.focus()
+    }
     // Keep the original DOM and the editor's selection/undo/decorator node keys.
     // Lexical root detachment belongs exclusively to SessionInputShell.dispose().
     return () => {
       if (root?.parentNode !== host) return
       const selection = editor.getEditorState().read(() => $getSelection()?.clone())
       if (selection !== undefined) parkedSelection.set(editor, selection)
+      parkedFocus.set(editor, root.contains(root.ownerDocument.activeElement))
       root.remove()
     }
   }, [editor])

@@ -51,7 +51,7 @@ npm run build
 完成后，插件包位于：
 
 ```text
-.build/dsh-projects-0.1.0-beta.3.tgz
+.build/dsh-projects-0.1.0-beta.4.tgz
 ```
 
 通过 README 中的正常插件管理器安装该文件。`.build/` 同时包含本次生成物及构建记录，不提交到源码仓库。构建过程包含 Host/Client 类型检查、官方 Remote 生成、界面资源装配以及 macOS 原生组件编译。

@@ -34,14 +34,14 @@
       "source": "packages/client/ui-chat/src/client/chat/AssistantMarkdown.tsx",
       "local": "client/chat/AssistantMarkdown.tsx",
       "sha256": "ac98e943bde17e8f5e7ace6d16d0343297e7cb86da14d066eb6a856cf8363f07",
-      "localSha256": "ac98e943bde17e8f5e7ace6d16d0343297e7cb86da14d066eb6a856cf8363f07",
-      "modified": false
+      "localSha256": "e93ca289869b82231a1d943ed59895f248e299914dc2e8f8443038eaf6b45390",
+      "modified": true
     },
     {
       "source": "packages/client/ui-chat/src/client/chat/AssistantNodeView.tsx",
       "local": "client/chat/AssistantNodeView.tsx",
       "sha256": "239c8fe1305ede17d3786bfdd61e7e52f3cab30ae548befe172867c52deef388",
-      "localSha256": "4c63d7d24dd035f7a4c96b1dfb7f9f9ce804b82f7ac8cb473a485ca296aa956a",
+      "localSha256": "323ec1ad99b320c59b75cf65330957af1b6c78cc3b02e3d02771f8e63180c042",
       "modified": true
     },
     {
@@ -76,7 +76,7 @@
       "source": "packages/client/ui-chat/src/client/chat/ChatView.tsx",
       "local": "client/chat/ChatView.tsx",
       "sha256": "b04d33feef8145c61b21000dcf037da244d232b4827866e56679ed360db641b7",
-      "localSha256": "85a6b9f79c5a64ef45847b051e1a2be940057605839fb545fef39e52881adfa4",
+      "localSha256": "e034e6f57ee4a89638a5f5297c81aded3b1276ed4e346d5531914e883ec38389",
       "modified": true
     },
     {
@@ -146,28 +146,28 @@
       "source": "packages/client/ui-chat/src/client/chat/MessageIconActions.module.css",
       "local": "client/chat/MessageIconActions.module.css",
       "sha256": "b5e3ced5112bb676345eaa7d1bf7ec291b87f56ffa87579b6ece7b6ca6c72902",
-      "localSha256": "b5e3ced5112bb676345eaa7d1bf7ec291b87f56ffa87579b6ece7b6ca6c72902",
-      "modified": false
+      "localSha256": "6f2168ad73fec61977f1da3a512f738480b830271f67a05f94edc7d5014f151d",
+      "modified": true
     },
     {
       "source": "packages/client/ui-chat/src/client/chat/MessageIconActions.tsx",
       "local": "client/chat/MessageIconActions.tsx",
       "sha256": "57bbf290748e848503b92d8659b4197c6cc62293cd2301bbe95bec43c8626fb5",
-      "localSha256": "57bbf290748e848503b92d8659b4197c6cc62293cd2301bbe95bec43c8626fb5",
-      "modified": false
+      "localSha256": "e9351c8c1f60f24f5fd59c95ebcb4e89616b0c66f0768175e304d49c0e0368c9",
+      "modified": true
     },
     {
       "source": "packages/client/ui-chat/src/client/chat/MessageItem.module.css",
       "local": "client/chat/MessageItem.module.css",
       "sha256": "e52ee9df23a65396983f2f22b3186a1e6fd72e4ba4fd0f48d5bee746205870f1",
-      "localSha256": "e52ee9df23a65396983f2f22b3186a1e6fd72e4ba4fd0f48d5bee746205870f1",
-      "modified": false
+      "localSha256": "a5009ab9087c263fefcabca987f85d01807faaa4bdf9fc53fcc95c37e34d8b6c",
+      "modified": true
     },
     {
       "source": "packages/client/ui-chat/src/client/chat/MessageItem.tsx",
       "local": "client/chat/MessageItem.tsx",
       "sha256": "c9e3bffd724e93ffe7fcb3566d02d2300ae6ab55678bd094f26e4e58d6c24713",
-      "localSha256": "77b80dc81ebd35056c840c4f72904ab15f84b592292ebfa7ca6795d4c01205f9",
+      "localSha256": "d9224d621b687001055634a24c147d61d91d5bed78df9ce68138771da76b963e",
       "modified": true
     },
     {
@@ -251,8 +251,8 @@
       "source": "packages/client/ui-chat/src/client/chat/TurnProcessNodeView.tsx",
       "local": "client/chat/TurnProcessNodeView.tsx",
       "sha256": "714f2f5a05d7f69c008148b286f7ca7cd0a4231b97d18877797dd14fb07190a0",
-      "localSha256": "714f2f5a05d7f69c008148b286f7ca7cd0a4231b97d18877797dd14fb07190a0",
-      "modified": false
+      "localSha256": "793b8f3d1a4877248ff1b462395807de98a076505d7bbd7fc3b426bde0e9da99",
+      "modified": true
     },
     {
       "source": "packages/client/ui-chat/src/client/chat/TurnTailNodeView.module.css",
@@ -265,7 +265,7 @@
       "source": "packages/client/ui-chat/src/client/chat/TurnTailNodeView.tsx",
       "local": "client/chat/TurnTailNodeView.tsx",
       "sha256": "4b493845e7d28b93a2db2198e70deffcf4b290c31218923fc7c945af737b56d1",
-      "localSha256": "d0addb58c66383fc9b7c2c732092c8c8ff9e848961ee9e62600ad70753da56be",
+      "localSha256": "d5d512571f23a00f70b363765e371381315f86fd837eb7b7eebfe994d7672e7e",
       "modified": true
     },
     {
@@ -279,8 +279,8 @@
       "source": "packages/client/ui-chat/src/client/chat/TurnTriggerNodeView.tsx",
       "local": "client/chat/TurnTriggerNodeView.tsx",
       "sha256": "52e4d1e567edb65e848bd2e174b68934636631e29350ad044c1d7439ff9e654f",
-      "localSha256": "52e4d1e567edb65e848bd2e174b68934636631e29350ad044c1d7439ff9e654f",
-      "modified": false
+      "localSha256": "95a014f73431323ec5deaec21258a1a3bf9258d905a6689ce8f61fa6bc14654a",
+      "modified": true
     },
     {
       "source": "packages/client/ui-chat/src/client/chat/TurnUsagePanel.module.css",
@@ -314,7 +314,7 @@
       "source": "packages/client/ui-chat/src/client/chat/register-node-renderers.ts",
       "local": "client/chat/register-node-renderers.ts",
       "sha256": "641d1215b345f1d794b6c49008bac50d582fc6c4bef64fffa5d87b7fa4c94679",
-      "localSha256": "4148c0a8a2abd2b49373d061f1a43080f229ff5e9648b6d662a5ebe523d2bbd4",
+      "localSha256": "f0cc389c7b96c0d3008225876058309ae49961729b901bdb4867998edced3c6d",
       "modified": true
     },
     {
@@ -384,8 +384,8 @@
       "source": "packages/client/ui-chat/src/client/chat/turn-trigger.ts",
       "local": "client/chat/turn-trigger.ts",
       "sha256": "4ee54bdad8891c7e8a52992f3ebfa9ea2bdb87719dc791fd21731064dacb2813",
-      "localSha256": "4ee54bdad8891c7e8a52992f3ebfa9ea2bdb87719dc791fd21731064dacb2813",
-      "modified": false
+      "localSha256": "f97d7fd4c2e74b99fce715d2aa8ca60f34df3f64524a843d726936fb80eea3c6",
+      "modified": true
     },
     {
       "source": "packages/client/ui-chat/src/client/chat/use-calendar-day.ts",
@@ -665,7 +665,7 @@
       "source": "packages/client/ui-chat/src/client/locale.ts",
       "local": "client/locale.ts",
       "sha256": "ab75e50ba99fedcf15230eb7746736afc9da81af681e3536c3f7c2143a47ad7c",
-      "localSha256": "67f17019180e55391367d1ecc12d0d1a93cd1c058f200a0be39022c526b3ea4b",
+      "localSha256": "1f2a3b58ea970decabeaaeb22306676f2bb69b5ebb393f5390dbc48c397de243",
       "modified": true,
       "commit": "1f81c047fc48fa190a683e469daa699857e9afe8"
     },
@@ -747,7 +747,11 @@
     "Native user message presentation supports Projects communication cards.",
     "Public canonical ui-chat/client retains sole ownership of ambient SlotMap and Chat snapshot types.",
     "Native user and context data retain the real message id for communication and source focus.",
-    "Inline local Markdown image URLs use exact FileReader byte ownership and scoped blob lifetimes instead of root media URLs."
+    "Inline local Markdown image URLs use exact FileReader byte ownership and scoped blob lifetimes instead of root media URLs.",
+    "Projects message chrome removes unused branch buttons and branch-only subscription/styles; copy/clock/usage, native forkAt Slot ownership, turn-tail branchUnavailable facts, and public Chat locale labels remain unchanged.",
+    "Assistant Markdown/node registration supplies an explicit settled-reply source capability to the Projects session-link boundary while retaining native Markdown rendering.",
+    "ChatView and message renderers retain Projects queue, pending-interaction/status, focus and FileReader wiring, with image/skill rendering adapted to the current host slots.",
+    "Turn errors retain durable turn/time and collapsible original diagnostics; process labels and execution-failure trigger title/icon use the separate Projects status locale."
   ],
   "closure": {
     "nativeFileCount": 105,

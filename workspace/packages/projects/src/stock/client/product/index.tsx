@@ -11,17 +11,17 @@ import type {} from '@deepseek-ai/dsh-client-ui-session/client'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-client-ui-tool/client'
 import { ProjectsPanel } from '../../../client/ProjectsPanel.tsx'
-import { ProjectsPanelController, type NativeFileOpenPort, type ProjectsPanelActions, type ProjectsRemote, type ProjectPanelBindingPort, type ProjectPanelReference } from '../../../client/controller.ts'
+import { ProjectsPanelController, type NativeFileOpenPort, type ProjectsRemote, type ProjectPanelBindingPort, type ProjectPanelReference } from '../../../client/controller.ts'
 import { ProjectMainModelControl, type ProjectMainModelControlInjected } from '../../../client/ProjectMainModelControl.tsx'
 import { ProjectCommunicationMessage, type ProjectCommunicationInjected, type ProjectCommunicationMessagePresentation } from '../../../client/ProjectCommunicationCard.tsx'
 import { MemoryNotice } from '../../../client/MemoryNotice.tsx'
-import type { ProjectsKey } from '../../../client/locales.ts'
-import type { HostObservable } from '@deepseek-ai/dsh-client-ui-slots'
-import type { ProjectConversationFileRequest, ReadConversationFile } from '../../../client/workflow-navigation.ts'
+import type {} from '../../../client/project-slots.ts'
 import type { NativeEventSource } from '../../../source-types.ts'
 import type { ProjectDetail } from '../../../public-types.ts'
 import { installProjectProductToolViews, type ProjectProductCommunicationPorts } from './tool-views.tsx'
 import { installProjectCommunicationQueue } from './communication-queue.tsx'
+import { createProjectPanelActions, type ProjectProductFileReaderPort } from './actions.ts'
+export type { ProjectProductFileReaderPort } from './actions.ts'
 export { installProjectProductToolViews, PROJECT_PRODUCT_TOOL_NAMES } from './tool-views.tsx'
 export type { ProjectProductCommunicationPorts, ProjectProductToolViewsOptions } from './tool-views.tsx'
 
@@ -35,12 +35,6 @@ export interface ProjectConversationPresentation {
   /** Existing seat visibility; hiding does not unmount its native conversation. */
   readonly visible?: boolean
   readonly focus?: { readonly id: number; readonly eventSeq: number; readonly messageId?: string | undefined } | undefined
-}
-
-export interface ProjectProductFileReaderPort {
-  readonly request: HostObservable<ProjectConversationFileRequest | undefined>
-  readonly read: ReadConversationFile
-  close(options?: { readonly focus?: boolean | undefined }): void
 }
 
 /** Every Host/native action is explicitly supplied; no ordinary-root service is captured. */
@@ -63,30 +57,10 @@ export interface ProjectProductUiPorts extends ProjectPanelBindingPort {
   readonly toggleGlobalSidebar?: () => void
 }
 
-declare module '@deepseek-ai/dsh-client-ui-slots' {
-  interface LocaleNamespaceMap { projects: ProjectsKey }
-  interface SlotMap {
-    'projects.main.conversation': { kind: 'single'; scope: 'session'; owner: { focus?: { readonly id: number; readonly eventSeq: number; readonly messageId?: string | undefined } | undefined } }
-    'projects.execution.conversation': { kind: 'single'; scope: 'session'; owner: { focus?: { readonly id: number; readonly eventSeq: number; readonly messageId?: string | undefined } | undefined } }
-    'projects.main.model': { kind: 'single'; scope: 'session' }
-    'projects.communication.message': { kind: 'single'; scope: 'session'; owner: ProjectCommunicationMessagePresentation }
-  }
-}
-
 /** Registers product seats in a private graph. The outer root owns only its Projects DOM/navigation. */
 export function installProjectProductUi(ctx: Context, ports: ProjectProductUiPorts) {
   const controller = new ProjectsPanelController(ports.remote, ports.sessions, ports.files, ports.generation, ports, ports.focusInput)
-  const baseActions = controller.actions()
-  const actions: ProjectsPanelActions = { ...baseActions,
-    hooks: { ...baseActions.hooks, projectFileRequest: ports.fileReader.request },
-    readConversationFile: ports.fileReader.read,
-    dismissConversationFile: id => { if (ports.fileReader.request.getSnapshot()?.id === id) ports.fileReader.close({ focus: true }) },
-    returnToFileConversation: async request => {
-      request.signal.throwIfAborted()
-      await baseActions.openTarget(request.projectId, { kind: request.role, sessionId: request.sessionId })
-    },
-    release: () => { ports.fileReader.close(); baseActions.release() },
-  }
+  const actions = createProjectPanelActions(controller.actions(), ports.fileReader)
   const disposers: (() => void)[] = []
   let disposed = false
   const dispose = (): void => {

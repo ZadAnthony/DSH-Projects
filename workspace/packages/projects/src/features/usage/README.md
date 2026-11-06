@@ -1,6 +1,6 @@
 # USE-1 项目用量
 
-当前模块沿公共 Host 的只读 `usage` 与 `watchUsage` 接到项目设置和主/执行会话标题；数据、缺失与计费含义仍由同一服务持有。主／执行会话可追溯原生子工作的新增量归入原逻辑会话，fork继承历史不重计；子来源不创建Project会话，也不获得新的模型或操作权限。
+当前模块沿公共 Host 的只读 `usage` 与 `watchUsage` 接到项目设置的独立用量页；数据、缺失与计费含义仍由同一服务持有。主／执行会话可追溯原生子工作的新增量归入原逻辑会话，fork继承历史不重计；子来源不创建Project会话，也不获得新的模型或操作权限。
 
 ## 用户得到什么
 
@@ -8,7 +8,7 @@
 - 总量、未缓存输入、输出、缓存读写、思考分类分别展示；思考已经包含于输出，不能再相加。
 - 明示统计范围、读取时间、可得记录的时间范围、不可读会话、缺失轮次、缺报辅助记录及无法归属单个模型的用量。未知不当零。
 - 没有可信价格或完整计费规则，费用固定为“未知”；不生成金额估算或账单。
-- 会话摘要复用同一次查询的会话结果，不保存第二份累计。
+- 项目用量页按需查询和刷新，不保存第二份累计。
 
 ## 稳定入口
 
@@ -16,7 +16,7 @@
 | --- | --- | --- |
 | `index.ts` | `ProjectUsageService`, `ProjectUsagePorts`, `ProjectUsageScope` | Host 即时只读汇总 |
 | `index.ts` | `createNativeUsageReader`, `deriveNativeUsageTurns`, `NativeUsageRead`, `NativeUsageTurn` | 原生只读适配和窄自验 |
-| `client.ts` | `UsagePanel`, `UsagePanelProps`, `UsageSessionSummary`, `formatUsageMetric` | 浏览器组件；无 Host 运行时依赖 |
+| `client.ts` | `UsagePanel`, `UsagePanelProps`, `formatUsageMetric` | 浏览器组件；无 Host 运行时依赖 |
 | `contract.ts`，亦经上述入口导出类型 | `ProjectUsageQuery`, `ProjectUsageResult`, `ProjectUsageActions`, `UsageSession`, `UsageMetrics` 等 | JSON 请求与结果，无日志、正文、文件路径或费用凭据 |
 
 浏览器只能引用 `client.ts` / `contract.ts`，不得从 Host 的 `index.ts` 导入运行时。
@@ -61,7 +61,7 @@
 
 当前stock `ProjectsController`的只读`@Remote('usage')`接收`ProjectUsageQuery`，按现有设置访问权限验证后调用`usage.query(query)`。Host结果类型为`ProjectUsageResult`。沿用Typert生成协议，不手写另一套codec。
 
-浏览器 `ProjectUsageActions.query` 映射到该方法。对象为当前项目；传入单个会话时服务会再次确认其项目归属。打开用量页或读取摘要不需要 Agent 活跃。
+浏览器 `ProjectUsageActions.query` 映射到该方法。对象为当前项目；传入单个会话时服务会再次确认其项目归属。打开用量页不需要 Agent 活跃。
 
 ### 3. 刷新通知
 
@@ -72,7 +72,7 @@
 ### 4. UI 挂载与构建输入
 
 - 设置窗口“用量”页挂 `UsagePanel({ projectId, actions })`；组件不创建窗口或修改导航。
-- 会话标题挂 `UsageSessionSummary({ session })`，`session` 取同次 `ProjectUsageResult.sessions` 对应行。标题需要会话全历史摘要时，以 `sessionId`、不限模型/时间查询；传入筛选行时提示只代表该筛选范围。
+- 聊天页面沿用DSH原生用量、上下文和轮次状态，不再额外挂Projects用量摘要或为摘要读取／订阅项目统计。
 - Host 把本模块 Host 入口与合同纳入相应类型输入；Client 引用 `client.ts` 后纳入 Client 输入。不要把 `native.ts` 放进浏览器。
 - 当前44.3声明匹配原版`0.2.1-rc.3`的peer；事件类型和公开组件沿原版包使用，Projects增强计量由上述本地owner承担，不要求原版导出旧定制API。正常构建生成公共协议，插件不修改DSH源码。
 - 模块测试、正常打包安装和完整Host／Client流程各保留准确范围，不用历史某次执行包的“未安装”推断当前状态。
@@ -83,11 +83,6 @@
 
 USE-1、USE-R1与B4当时的测试数、U1–U3修复、28-token反例、旧命令、首败及未覆盖范围见[模块历史](../../../../../../docs/archive/2026-10-26-current-docs-closeout/MODULE-HISTORY.md#领域模块历史自验)。它们保留各自版本事实；当前完整安装结论见[发行记录](../../../../../../source/releases/44-latest/README.md)。本次文档整理未重跑验证；真实费用、性能收益与模型效果没有据此得到验证。
 
-## 当前标题摘要
-
-ProjectsPanel 为当前项目读取一次不带会话、模型或时间筛选的 `ProjectUsageResult`，主/执行标题分别取同一结果中的对应会话行，以 `UsageSessionSummary({ scope: 'session-history' })` 标明全历史范围。设置页独立筛选不覆盖标题结果。打开、绑定变化、来源失效和原 `watchUsage` 通知只令界面重查，不唤醒模型、不保存第二份累计、不轮询。失败撤下旧摘要显示未知；费用继续未知，已报告零token也不会推算为零费用。
-
-
 ## 部分轮次的披露
 
 `NativeUsageTurn.usage`仍是原生完整轮次精确值；新增`reportedUsage`是同一原生attempt fold派生的只读小计和分类缺报。聚合优先消费后者，各可选分类分别保留已报值，不能因另一请求缺少该分类而抹掉已知部分。缺报不计零，也不借会话累计参考补齐。
@@ -96,4 +91,4 @@ ProjectsPanel 为当前项目读取一次不带会话、模型或时间筛选的
 
 ## 主会话接力与管理来源
 
-用量绑定由 runtime 提供稳定主会话的全部实际 carriers、管理 Bot 和已归属的准备来源；准备物不成为工作入口。`session-manager` 的轮次（含补读、重试）和辅助压缩分别在请求来源分组标识，保留真实模型、失败、取消、晚到与缺报。主会话标题把同一次查询中该逻辑会话的全部 carrier 行即时相加，仍不保存累计或估算费用；未知来源与明确零分别披露。
+用量绑定由 runtime 提供稳定主会话的全部实际 carriers、管理 Bot 和已归属的准备来源；准备物不成为工作入口。`session-manager` 的轮次（含补读、重试）和辅助压缩分别在请求来源分组标识，保留真实模型、失败、取消、晚到与缺报。独立用量页保留该逻辑会话全部 carrier 的来源明细与项目汇总，仍不保存累计或估算费用；未知来源与明确零分别披露。

@@ -6,7 +6,6 @@ import type {
 } from "@deepseek-ai/dsh-typert-protocol";
 import type {
   ISessions,
-  SessionBinding,
   SessionReference,
   SessionRetainOptions,
 } from "@deepseek-ai/dsh-api-session-controller/client";
@@ -85,7 +84,7 @@ import type {
   RenameExecutionSessionResult,
 } from "../public-types.ts";
 import type { NativeProjectSource } from "../source-types.ts";
-import { projectSourceNavigation, type ProjectConversationFileRequest, type ProjectConversationFilePage, type ReadConversationFile } from './workflow-navigation.ts';
+import { projectSourceNavigation, type ProjectConversationFileRequest, type ReadConversationFile } from './workflow-navigation.ts';
 import type {
   ManualRunAdmissionResult, ScheduleSettingsActions, ScheduleSnapshot, ScheduleWriteResult,
 } from "../features/schedule/contract.ts";
@@ -225,8 +224,6 @@ export interface ProjectsRemote {
 export interface NativeFileOpenPort {
   canOpenWorkspacePath(): Promise<RemoteResult<boolean>>;
   openWorkspacePath(input: { readonly path: string }): Promise<RemoteResult<{ readonly opened: true }>>;
-  /** Native Session authorization and bounded text paging remain Host-owned. */
-  readConversationFile?(hostSessionId: string, path: string, offset: number, signal?: AbortSignal): Promise<RemoteResult<Omit<ProjectConversationFilePage, 'readAt'>>>;
 }
 
 /** Product presentation mode never alters the stock SessionReference contract. */
@@ -368,6 +365,14 @@ export interface ProjectsPanelActions {
   readonly release: () => void;
 }
 
+/** Project and navigation callbacks; the product's file owner supplies file actions. */
+export type ProjectsPanelCoreActions = Omit<
+  ProjectsPanelActions,
+  'hooks' | 'readConversationFile' | 'dismissConversationFile' | 'returnToFileConversation'
+> & {
+  readonly hooks: Omit<ProjectsPanelActions['hooks'], 'projectFileRequest'>;
+};
+
 function valueOf<T>(result: RemoteResult<T>): T {
   if (!result.ok) throw Object.assign(new Error(result.error.message), { code: result.error.code, details: result.error.details });
   return result.value;
@@ -476,14 +481,6 @@ export class ProjectsPanelController {
   private navigation: ProjectPanelNavigation | undefined;
   private readonly navigationListeners = new Set<() => void>();
   private navigationId = 0;
-  private fileRequestId = 0;
-  private fileRequest: ProjectConversationFileRequest | undefined;
-  private fileLifetime = new AbortController();
-  private readonly fileListeners = new Set<() => void>();
-  private readonly fileRequestSource: HostObservable<ProjectConversationFileRequest | undefined> = {
-    getSnapshot: () => this.fileRequest,
-    subscribe: listener => { this.fileListeners.add(listener); return () => { this.fileListeners.delete(listener); }; },
-  };
   private watchedProjectId: ProjectId | undefined;
   private watch: RemoteStreamHandle<ProjectDetail, never> | undefined;
   private watchEpoch = 0;
@@ -543,14 +540,13 @@ export class ProjectsPanelController {
     });
   }
 
-  actions(): ProjectsPanelActions {
+  actions(): ProjectsPanelCoreActions {
     return {
       hooks: {
         projectDetail: this.detailSource,
         projectWatchInterruption: this.watchInterruptionSource,
         projectMemoryNotice: this.memoryNoticeSource,
         projectNavigation: this.navigationSource,
-        projectFileRequest: this.fileRequestSource,
       },
       deleteExecutionSession: async input => {
         const epoch = this.watchEpoch;
@@ -659,22 +655,6 @@ export class ProjectsPanelController {
         const unavailable = this.unavailableSources.get(request.source.kind === 'communication-part' ? request.source.holder.hostSessionId : request.source.hostSessionId);
         return unavailable === undefined ? result : { status: "unavailable", found: false, items: [],
           limitations: [], reason: this.unavailableReason(unavailable) };
-      },
-      readConversationFile: async (request, options, signal) => {
-        this.assertFileRequest(request);
-        signal?.throwIfAborted();
-        const read = this.nativeFiles?.readConversationFile;
-        if (read === undefined) throw new Error('当前宿主未提供会话文件读取能力。');
-        const combined = signal === undefined ? request.signal : AbortSignal.any([request.signal, signal]);
-        const value = valueOf(await read(request.hostSessionId, request.path, options?.offset ?? request.line ?? 1, combined));
-        combined.throwIfAborted();
-        this.assertFileRequest(request);
-        return { ...value, readAt: new Date().toISOString() };
-      },
-      dismissConversationFile: id => { if (this.fileRequest?.id === id) this.publishFileRequest(undefined); },
-      returnToFileConversation: async request => {
-        this.assertFileRequest(request);
-        await this.openTarget(request.projectId, { kind: request.role, sessionId: request.sessionId });
       },
       locateProjectSource: async (projectId, source, read) => {
         const assertCurrent = this.beginNavigation();
@@ -905,9 +885,6 @@ export class ProjectsPanelController {
     this.navigationId++;
     this.stopWatching();
     this.publishNavigation(undefined);
-    this.fileLifetime.abort();
-    this.fileLifetime = new AbortController();
-    this.publishFileRequest(undefined);
     const main = this.main, execution = this.execution;
     this.currentReferences = undefined; this.main = undefined; this.execution = undefined;
     this.executionProjectSessionId = undefined;
@@ -930,9 +907,6 @@ export class ProjectsPanelController {
       return;
     }
     this.stopWatching();
-    this.fileLifetime.abort();
-    this.fileLifetime = new AbortController();
-    this.publishFileRequest(undefined);
     this.publishDetail(detail);
     this.watchedProjectId = projectId;
     this.startWatch(projectId);
@@ -1082,37 +1056,6 @@ export class ProjectsPanelController {
     const unavailable = this.unavailableSources.get(source.hostSessionId);
     return unavailable === undefined ? read : { resolved: false, hostSessionId: source.hostSessionId,
       items: [], reason: this.unavailableReason(unavailable) };
-  }
-
-  /** Accept only a gesture from the exact retained, currently displayed native binding. */
-  openConversationFile(binding: SessionBinding, path: string, options: { readonly line?: number } | undefined, signal: AbortSignal): void {
-    signal.throwIfAborted();
-    const detail = this.detail;
-    const owner = this.main?.reference.binding === binding ? this.main
-      : this.execution?.reference.binding === binding ? this.execution : undefined;
-    const session = detail?.sessions.find(row => row.hostSessionId === binding.sessionId);
-    if (detail === undefined || owner === undefined || session === undefined
-      || detail.project.sourceLifecycle !== undefined
-      || this.unavailableSources.has(binding.sessionId)) throw new DOMException('原会话已不在当前项目阅读现场。', 'AbortError');
-    if (session.role !== 'main' && session.role !== 'execution') throw new Error('会话文件来源身份不可用。');
-    this.publishFileRequest({ id: ++this.fileRequestId, projectId: detail.project.id,
-      sessionId: session.id, hostSessionId: session.hostSessionId, role: session.role,
-      sessionTitle: session.title, path, line: options?.line, signal: this.fileLifetime.signal });
-  }
-
-  private assertFileRequest(request: ProjectConversationFileRequest): void {
-    request.signal.throwIfAborted();
-    const detail = this.detail;
-    const session = detail?.sessions.find(row => row.id === request.sessionId);
-    if (detail?.project.id !== request.projectId || detail.project.sourceLifecycle !== undefined
-      || session === undefined || session.role !== request.role
-      || session.hostSessionId !== request.hostSessionId && !session.carriers?.some(row => row.hostSessionId === request.hostSessionId)
-      || this.unavailableSources.has(request.hostSessionId)) throw new Error('原项目或会话已不可读取。');
-  }
-
-  private publishFileRequest(request: ProjectConversationFileRequest | undefined): void {
-    this.fileRequest = request;
-    for (const listener of this.fileListeners) listener();
   }
 
   private unavailableReason(source: ProjectUnavailableSource): string {

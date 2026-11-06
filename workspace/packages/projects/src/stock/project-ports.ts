@@ -38,6 +38,8 @@ export interface ProjectControlPort {
   prepareAbsentCarrier(id: SessionId): Promise<ProjectAbsentCarrierProof>
   createPreparedAgent(request: { projectId: string; sessionId: string; attemptId: string; options: CreateAgentOptions }): Promise<AgentHandle>
   resolve(id: SessionId): Promise<{ agent: Agent } | { error: { message: string } }>
+  /** 仅在原配置hold仍有效时，恢复完整创建身份相符的待执行owner。 */
+  resolveScheduleConfiguration(header: SessionHeader, hold: { assertCurrent(header: SessionHeader): void }): Promise<{ agent: Agent } | { error: { message: string } }>
   inspect(id: SessionId): Promise<{ meta: SessionHeader; events: readonly SessionEvent[]; inheritedEventCount: number; owner?: { readonly projectId: string; readonly logicalSessionId: string } }>
   retire(id: SessionId, options?: { handle?: AgentHandle }): Promise<ProjectRetirement>
   captureSettled(id: SessionId): Promise<() => void>

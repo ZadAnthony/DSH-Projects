@@ -4,9 +4,11 @@ import {
   IconAgentPresetOutlineRegular, IconClockOutlineRegular, IconBranchOutlineRegular,
   IconChevronDownOutlineRegular, IconContextInjectionOutlineRegular, IconCordisPluginOutlineRegular,
   IconGoalOutlineRegular, IconGlobeOutlineRegular, IconPaperPlaneOutlineRegular, IconQueueOutlineRegular,
+  IconWarningOutlineRegular,
   type IconProps,
 } from '@deepseek-ai/dsh-client-ui-primitives'
-import type { ChatNodeViewProps } from '../contract/slots.ts'
+import type { ChatNodeViewProps, ChatViewSlotProps } from '../contract/slots.ts'
+import { STATUS_NS } from '../locale.ts'
 import { formatMessageClock } from './message-chrome.ts'
 import { NoticeBody } from './ContextBody.tsx'
 import { turnTriggerDetails, type TurnTriggerIcon } from './turn-trigger.ts'
@@ -14,6 +16,7 @@ import css from './TurnTriggerNodeView.module.css'
 
 const TRIGGER_ICONS: Record<TurnTriggerIcon, ComponentType<IconProps>> = {
   request: IconContextInjectionOutlineRegular,
+  error: IconWarningOutlineRegular,
   goal: IconGoalOutlineRegular,
   agent: IconPaperPlaneOutlineRegular,
   team: IconAgentPresetOutlineRegular,
@@ -26,7 +29,7 @@ const TRIGGER_ICONS: Record<TurnTriggerIcon, ComponentType<IconProps>> = {
 }
 
 /** Render recorded trigger attribution above the whole-Turn disclosure. */
-export function TurnTriggerNodeView({ node, t }: Pick<ChatNodeViewProps<'turn-trigger'>, 'node' | 't'>) {
+export function TurnTriggerNodeView({ node, t, projectStatusText }: Pick<ChatNodeViewProps<'turn-trigger'>, 'node' | 't'> & Pick<ChatViewSlotProps, 'projectStatusText'>) {
   const [open, setOpen] = useState(false)
   const bodyId = useId()
   const details = turnTriggerDetails(node.data)
@@ -37,7 +40,7 @@ export function TurnTriggerNodeView({ node, t }: Pick<ChatNodeViewProps<'turn-tr
     <section className={css.root} data-turn-trigger>
       <button className={css.header} type="button" aria-expanded={open} aria-controls={bodyId} onClick={() => { setOpen(!open) }}>
         <span className={css.icon} aria-hidden><TriggerIcon size={14} /></span>
-        <span className={css.title}>{t(details.title)}</span>
+        <span className={css.title}>{details.namespace === STATUS_NS ? projectStatusText(details.title) : t(details.title)}</span>
         <time className={css.time} dateTime={date.toISOString()}>{time}</time>
         <IconChevronDownOutlineRegular size={12} className={open ? css.openChevron : css.chevron} />
       </button>

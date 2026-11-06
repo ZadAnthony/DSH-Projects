@@ -7,15 +7,12 @@ import { apply as applyReferences } from '@deepseek-ai/dsh-client-ui-reference/c
 import { apply as applyModels, ModelDirectoryResolver } from '@deepseek-ai/dsh-client-ui-model-selection/client'
 import { apply as applyApproval } from '@deepseek-ai/dsh-client-ui-approval/client'
 import { apply as applyQuestions } from '@deepseek-ai/dsh-client-ui-user-questions/client'
-import { apply as applyPlan } from '@deepseek-ai/dsh-client-ui-plan/client'
-import { apply as applyResources } from '@deepseek-ai/dsh-client-resources/client'
 import type { ProjectNativeCapabilityPorts, ProjectPlanNavigationPort } from './contracts.ts'
 import { ProjectScopedShortcuts } from './shortcuts.ts'
 import { ProjectPlanNavigation } from './plan-navigation.tsx'
 import { installProjectNativeToolViews } from './tool-views.ts'
 import { installProjectCurrentSessionPickers } from './pickers/index.ts'
-import { installProjectPresentedFiles } from './deliverables/index.ts'
-import { installProjectChangedFiles } from './changes/index.ts'
+import { installProjectReadOnlyNativePresentations } from './read-only.ts'
 
 export * from './contracts.ts'
 export { ProjectScopedShortcuts } from './shortcuts.ts'
@@ -96,18 +93,7 @@ export async function installProjectNativeCapabilities(ctx: Context, ports: Proj
     if (ctx.get(key) === undefined) ctx.provide(key, ports.remote[owner])
     else if (ctx.get(key) !== ports.remote[owner]) throw new Error(`Projects native namespace belongs to another owner: ${key}`)
   }
-  // The explicit ports are complete for what the published plan plugin reads.
-  if (ctx.get('sidebarRight') !== undefined) ctx.set('sidebarRight', planNavigation.sidebarRight)
-  else ctx.provide('sidebarRight', planNavigation.sidebarRight)
-  ctx.provide('sidebarRightTabs', planNavigation.sidebarRightTabs)
-  if (ctx.get('resources') === undefined) applyResources(ctx)
-  await ctx.inject(['slots', 'sessions', 'uiSession', 'uiConversation', 'locale', 'resources'], () => {})
-
-  // Plan's history cards and full-text resources remain available in readers;
-  // a ReaderDomain never declares a composer, so its mutating input seat cannot mount.
-  applyPlan(ctx)
-  if (ports.presentedFiles !== undefined) await installProjectPresentedFiles(ctx, ports.presentedFiles)
-  if (ports.changedFiles !== undefined) await installProjectChangedFiles(ctx, ports.changedFiles)
+  await installProjectReadOnlyNativePresentations(ctx, { ...ports, session: ports.remote.session, planNavigation })
   if (ports.mode === 'reader') {
     if (ports.selectedTools !== undefined) await installProjectNativeToolViews(ctx, ports.selectedTools, ports.mode)
     return { mode: 'reader', shortcuts: undefined, planNavigation, toolViewsInstalled: ports.selectedTools !== undefined,
