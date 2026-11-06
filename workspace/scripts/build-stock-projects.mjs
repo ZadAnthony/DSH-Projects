@@ -8,6 +8,7 @@ import { createRequire, isBuiltin } from 'node:module'
 import { dirname, extname, isAbsolute, relative, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { getPluginDependenciesRoot, getStockRoot, linkStockModules, prepareStock, stockModule, supportedDshRange } from '../../scripts/stock-tools.mjs'
+import { linkProjectDependencies, projectDependencyInputs } from '../../scripts/project-dependencies.mjs'
 
 const workspace = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const repository = dirname(workspace)
@@ -36,8 +37,6 @@ const stockCommit = stockInputs.commit
 const { WorkspaceAnalyzer, FaceModelEmitter } = await import(pathToFileURL(resolve(stock, 'packages/typert/generator/lib/index.js')).href)
 const { PLATFORM_MODULES } = await import(pathToFileURL(resolve(stock, 'packages/client/web/lib/types/platform.js')).href)
 const ts = (await import(pathToFileURL(resolve(stock, 'node_modules/typescript/lib/typescript.js')).href)).default
-const requireStock = createRequire(resolve(stock, 'packages/boot/app-boot/package.json'))
-const semver = requireStock('semver')
 const { transform: transformCss } = createRequire(resolve(stock, 'package.json'))('lightningcss')
 
 const requested = [
@@ -72,66 +71,8 @@ const nativePackages = await linkStockModules(project, stock)
 const stockRequire = createRequire(resolve(stock, 'packages/core/agent-loop/package.json'))
 await rm(resolve(project, 'node_modules/zod'), { recursive: true, force: true })
 await symlink(dirname(stockRequire.resolve('zod/package.json')), resolve(project, 'node_modules/zod'), 'dir')
-const dependencies = { ...original.dependencies }
-// Google remains bundled rather than an installed plugin dependency. All
-// ordinary versions are pinned by the independent public lockfile. Same-version
-// SDK copies take precedence so native/plugin types retain one identity.
-const bundledDependencies = { ...original.devDependencies }
-for (const name of Object.keys(bundledDependencies)) delete dependencies[name]
-const dependencyInputs = new Map()
-const nativeChatManifest = JSON.parse(await readFile(resolve(stock, 'packages/client/ui-chat/package.json'), 'utf8'))
-const virtualRange = nativeChatManifest.dependencies?.['@tanstack/react-virtual']
-  ?? nativeChatManifest.devDependencies?.['@tanstack/react-virtual']
-if (virtualRange === undefined) throw new Error('The stock Chat manifest does not declare its virtual list library')
-const pluginDependenciesRoot = getPluginDependenciesRoot()
-const publicDependencyManifest = JSON.parse(await readFile(resolve(repository, 'scripts/plugin-dependencies/package.json'), 'utf8'))
-const publicDependencyLock = JSON.parse(await readFile(resolve(repository, 'scripts/plugin-dependencies/package-lock.json'), 'utf8'))
-const pnpmRoot = resolve(stock, 'node_modules/.pnpm')
-const cachedPackages = await readdir(pnpmRoot)
-for (const [name, range] of Object.entries({ ...dependencies, ...bundledDependencies })) {
-  let directory = resolve(pluginDependenciesRoot, 'node_modules', name)
-  let metadata
-  try {
-    metadata = JSON.parse(await readFile(resolve(directory, 'package.json'), 'utf8'))
-  } catch (error) {
-    if (error.code !== 'ENOENT') throw error
-    throw new Error(`Missing public build dependency ${name}. Run npm run deps:install; see BUILDING.md.`)
-  }
-  const pinned = publicDependencyManifest.dependencies[name]
-  const locked = publicDependencyLock.packages?.['node_modules/' + name]?.version
-  if (locked !== pinned || metadata.version !== pinned || !semver.satisfies(metadata.version, range)) {
-    throw new Error(`Build dependency ${name}@${metadata.version} does not match public pin ${pinned} / package range ${range}. Run npm run deps:install.`)
-  }
-  if (name === '@tanstack/react-virtual' && !semver.satisfies(metadata.version, virtualRange)) {
-    throw new Error(`Build dependency ${name}@${metadata.version} does not match the SDK Chat range ${virtualRange}`)
-  }
-  // Restore the stock builder's preference for a shared SDK dependency, but
-  // only at the exact public pin: never select a different cached version.
-  // In particular, native input-shell declarations and the private editor must
-  // resolve lexical / @lexical classes from the same physical package closure.
-  const prefix = name.replaceAll('/', '+') + '@'
-  for (const key of cachedPackages.filter(key => key.startsWith(prefix)).sort()) {
-    const candidate = resolve(pnpmRoot, key, 'node_modules', name)
-    try {
-      const value = JSON.parse(await readFile(resolve(candidate, 'package.json'), 'utf8'))
-      if (value.name === name && value.version === pinned) { directory = candidate; break }
-    } catch (error) { if (error.code !== 'ENOENT') throw error }
-  }
-  dependencyInputs.set(name, { directory, version: metadata.version })
-  if (name in dependencies) dependencies[name] = metadata.version
-  const link = resolve(project, 'node_modules', name)
-  await mkdir(dirname(link), { recursive: true })
-  await rm(link, { recursive: true, force: true })
-  await symlink(directory, link, 'dir')
-}
-const rendererRequire = createRequire(resolve(stock, 'packages/client/ui-renderer/package.json'))
-for (const name of ['react', 'react-dom', '@types/react', '@types/react-dom']) {
-  const directory = dirname(rendererRequire.resolve(name + '/package.json'))
-  const link = resolve(project, 'node_modules', name)
-  await mkdir(dirname(link), { recursive: true })
-  await rm(link, { recursive: true, force: true })
-  await symlink(directory, link, 'dir')
-}
+const { dependencies, dependencyInputs } = projectDependencyInputs(original, stock, getPluginDependenciesRoot())
+await linkProjectDependencies(project, stock, dependencyInputs)
 const peers = { ...original.peerDependencies }
 const nativePeerRange = (name, version) => name === '@deepseek-ai/dsh' || name.startsWith('@deepseek-ai/dsh-')
   ? supportedDshRange : version

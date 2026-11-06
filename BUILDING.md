@@ -66,4 +66,6 @@ npm run build
 
 构建输出默认在 `.build/`，可用 `DSH_PROJECTS_BUILD_ROOT` 指定另一个独立输出目录。macOS 上 Node 头文件位于非标准位置时，可用 `DSH_PROJECTS_NODE_INCLUDE` 指定包含 `node_api.h` 的目录。测试资料仅放在本次构建输出内的临时目录，不使用日常项目资料。
 
+`scripts/project-dependencies.mjs` 统一维护精确依赖选择、SDK包映射及React闭包映射；公开构建入口和测试使用同一实现。
+
 SDK 输入和插件依赖分别锁定；实际安装测试仍需使用对应包。重新构建不承诺与已有发行包逐字节相同。

@@ -1,9 +1,9 @@
-import { existsSync, globSync, readFileSync } from 'node:fs'
-import { mkdir, readdir, rm, symlink } from 'node:fs/promises'
+import { existsSync, readFileSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'
 import { createRequire } from 'node:module'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { linkStockModules as linkSdkModules } from './project-dependencies.mjs'
 
 export const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 export const workspaceRoot = resolve(projectRoot, 'workspace')
@@ -65,34 +65,7 @@ export function prepareStock(stock = getStockRoot()) {
   return { ...stockIdentity(stock), tools: stockTools(stock) }
 }
 
-/** Link normal built SDK packages into an isolated build/test package. */
-export async function linkStockModules(target, stock = getStockRoot()) {
-  const modules = resolve(target, 'node_modules')
-  await rm(modules, { recursive: true, force: true })
-  await mkdir(modules, { recursive: true })
-  for (const name of await readdir(resolve(stock, 'node_modules'))) {
-    // Scoped directories belong to the candidate. Never share writable package
-    // manager metadata or a whole namespace directory with the SDK checkout.
-    if (name.startsWith('.')) continue
-    if (name.startsWith('@')) {
-      await mkdir(resolve(modules, name), { recursive: true })
-      for (const child of await readdir(resolve(stock, 'node_modules', name))) {
-        await symlink(resolve(stock, 'node_modules', name, child), resolve(modules, name, child))
-      }
-    } else await symlink(resolve(stock, 'node_modules', name), resolve(modules, name))
-  }
-  const nativePackages = new Map()
-  for (const input of globSync(['packages/*/*/package.json', 'vendor/*/package.json',
-    'native/*/packages/*/package.json', 'apps/*/package.json'], { cwd: stock })) {
-    const directory = dirname(resolve(stock, input))
-    const metadata = JSON.parse(readFileSync(resolve(directory, 'package.json'), 'utf8'))
-    if (!metadata.name?.startsWith('@deepseek-ai/')) continue
-    if (nativePackages.has(metadata.name)) throw new Error(`Duplicate native package: ${metadata.name}`)
-    nativePackages.set(metadata.name, { directory, metadata })
-    const link = resolve(modules, metadata.name)
-    await mkdir(dirname(link), { recursive: true })
-    await rm(link, { recursive: true, force: true })
-    await symlink(directory, link, 'dir')
-  }
-  return nativePackages
+/** Preserve the public SDK default at this entry point. */
+export function linkStockModules(target, stock = getStockRoot()) {
+  return linkSdkModules(target, stock)
 }
