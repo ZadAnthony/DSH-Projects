@@ -7,15 +7,14 @@ import { linkStockModules as linkSdkModules } from './project-dependencies.mjs'
 
 export const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 export const workspaceRoot = resolve(projectRoot, 'workspace')
-export const requiredStockCommit = 'b830ec950faba0a46dda564be3e2d854afed94f1'
-export const supportedStockSources = Object.freeze({ '0.2.1-rc.5': requiredStockCommit })
-// Retained runtime compatibility metadata. This public source build uses rc.5;
-// rc.3 has not been retested for the public candidate.
-export const supportedDshRange = '0.2.1-rc.3 || 0.2.1-rc.5'
+export const requiredStockCommit = '38a6a5c965aa99ab525161efb7cc5cf1fe62fced'
+export const supportedStockSources = Object.freeze({ '0.2.2-rc.3': requiredStockCommit })
+// This public source build targets only the selected rc.3 release.
+export const supportedDshRange = '0.2.2-rc.3'
 
 export function getStockRoot() {
   return resolve(process.env.DSH_PROJECTS_STOCK_ROOT
-    ?? resolve(projectRoot, '.vendor/deepseek-harness'))
+    ?? resolve(projectRoot, '.vendor/deepseek-harness-0.2.2-rc.3'))
 }
 
 export function getPluginDependenciesRoot() {
@@ -26,7 +25,7 @@ export function getPluginDependenciesRoot() {
 export function stockIdentity(stock = getStockRoot()) {
   const manifest = JSON.parse(readFileSync(resolve(stock, 'package.json'), 'utf8'))
   const expectedCommit = supportedStockSources[manifest.version]
-  if (!expectedCommit) throw new Error(`DSH build input version is ${manifest.version}; this source build requires 0.2.1-rc.5 (${requiredStockCommit}). See BUILDING.md.`)
+  if (!expectedCommit) throw new Error(`DSH build input version is ${manifest.version}; this source build requires 0.2.2-rc.3 (${requiredStockCommit}). See BUILDING.md.`)
   const commit = execFileSync('git', ['-C', stock, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim()
   if (commit !== expectedCommit) throw new Error(`DSH source commit is ${commit}; ${manifest.version} requires ${expectedCommit}. See BUILDING.md.`)
   return { stock, version: manifest.version, commit }

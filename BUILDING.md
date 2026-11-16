@@ -15,21 +15,21 @@
 
 ```sh
 mkdir -p .vendor
-git init .vendor/deepseek-harness
-git -C .vendor/deepseek-harness fetch --depth=1 https://github.com/deepseek-ai/deepseek-harness.git b830ec950faba0a46dda564be3e2d854afed94f1
-git -C .vendor/deepseek-harness checkout --detach FETCH_HEAD
+git init .vendor/deepseek-harness-0.2.2-rc.3
+git -C .vendor/deepseek-harness-0.2.2-rc.3 fetch --depth=1 https://github.com/deepseek-ai/deepseek-harness.git 38a6a5c965aa99ab525161efb7cc5cf1fe62fced
+git -C .vendor/deepseek-harness-0.2.2-rc.3 checkout --detach FETCH_HEAD
 ```
 
 进入 SDK 目录，安装其锁定依赖并使用上游正常构建命令：
 
 ```sh
-cd .vendor/deepseek-harness
+cd .vendor/deepseek-harness-0.2.2-rc.3
 corepack pnpm install --frozen-lockfile
 corepack pnpm run build:artifacts
 cd ../..
 ```
 
-这是 DeepSeek Harness `0.2.1-rc.5` 的固定公开提交。仅有下载后的源码不够，插件需要 SDK 已生成的类型、构建工具和 Remote 生成器。不要用日常运行中的宿主目录作构建工作区。
+这是 DeepSeek Harness `0.2.2-rc.3` 的固定公开提交。仅有下载后的源码不够，插件需要 SDK 已生成的类型、构建工具和 Remote 生成器。不要用日常运行中的宿主目录作构建工作区。
 
 如果已在其他位置准备了同一固定提交的独立 SDK，可在当前终端设置 `DSH_PROJECTS_STOCK_ROOT` 为其绝对路径；否则使用上面的默认目录。构建会临时在该 SDK 内放入插件类型投影，并在完成或报错时清理，不修改宿主源码。
 

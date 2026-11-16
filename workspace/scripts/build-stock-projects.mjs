@@ -39,28 +39,16 @@ const { PLATFORM_MODULES } = await import(pathToFileURL(resolve(stock, 'packages
 const ts = (await import(pathToFileURL(resolve(stock, 'node_modules/typescript/lib/typescript.js')).href)).default
 const { transform: transformCss } = createRequire(resolve(stock, 'package.json'))('lightningcss')
 
-const requested = [
-  '@deepseek-ai/cordis', 'react', 'react-dom', 'react-dom/client',
-  '@deepseek-ai/dsh-api-gateway/client', '@deepseek-ai/dsh-api-session-controller/client',
-  '@deepseek-ai/dsh-client-connection/client', '@deepseek-ai/dsh-client-ui-renderer/client',
-  '@deepseek-ai/dsh-client-ui-session/client', '@deepseek-ai/dsh-client-ui-conversation/client',
-  '@deepseek-ai/dsh-client-ui-chat/client', '@deepseek-ai/dsh-client-locale/client',
-  '@deepseek-ai/dsh-client-ui-tool/client',
-  '@deepseek-ai/dsh-client-store', '@deepseek-ai/dsh-client-ui-slots',
-  '@deepseek-ai/dsh-client-ui-primitives',
-  '@deepseek-ai/dsh-client-ui-input-trigger/client', '@deepseek-ai/dsh-client-ui-commands/client',
-  '@deepseek-ai/dsh-client-ui-reference/client', '@deepseek-ai/dsh-client-ui-model-selection/client',
-  '@deepseek-ai/dsh-client-ui-approval/client', '@deepseek-ai/dsh-client-ui-user-questions/client',
-  '@deepseek-ai/dsh-client-ui-plan/client', '@deepseek-ai/dsh-client-resources/client',
-  '@deepseek-ai/dsh-client-ui-workflow-run/client', '@deepseek-ai/dsh-client-ui-subagent/client',
-  '@deepseek-ai/dsh-client-ui-skill/client', '@deepseek-ai/dsh-api-job-controller/client',
-  '@deepseek-ai/dsh-client-ui-jobs/client', '@deepseek-ai/dsh-client-ui-attachment/client',
-]
+const requested = original.dsh.client.external
 const external = [...new Set([...PLATFORM_MODULES, ...requested])]
 const inlineNativeWire = /^(?:@deepseek-ai\/dsh-(?:file-reference|session|llm|tools|brand|deque|output-retention|typert-protocol|util-crypto|util-values|util-workspace-path)(?:\/|$)|@deepseek-ai\/dsh-token-meter\/client$|@deepseek-ai\/dsh-native-command\/types$|@deepseek-ai\/dsh-host-open-in-app\/shared$|@deepseek-ai\/dsh-plugin-manager\/registry$|@deepseek-ai\/dsh-agent-preset-registry\/display$|@deepseek-ai\/dsh-api-workspace-controller\/default-workspace$|@deepseek-ai\/dsh-spill-policy\/notice$)/
 // Published keyboard binding/configuration folds have no cross-plugin service
 // identity. The private registry imports these functions, not a root registry.
 const inlineNativeProtocol = ['@deepseek-ai/dsh-client-shortcuts/protocol']
+const inlineNativeHost = [
+  '@deepseek-ai/dsh-tool-executor-ptc/src/ptc.ts',
+  '@deepseek-ai/dsh-tool-executor-ptc/src/ptc-calls.ts',
+]
 
 await mkdir(project, { recursive: true })
 await rm(resolve(project, 'src'), { recursive: true, force: true })
@@ -110,30 +98,25 @@ const manifest = {
     './package.json': './package.json',
   },
   files: ['lib', 'cordis.patch.yml', 'README.md', 'NOTICE.md', 'LICENSE', 'THIRD_PARTY_NOTICES.md'],
-  dsh: {
-    bundle: { patch: './cordis.patch.yml' },
-    client: {
-      platform: 'web', immediately: true, external: requested,
-      inject: ['@deepseek-ai/dsh-api-gateway', '@deepseek-ai/dsh-client-locale',
-        '@deepseek-ai/dsh-api-session-controller', '@deepseek-ai/dsh-client-ui-settings',
-        '@deepseek-ai/dsh-client-ui-layout', '@deepseek-ai/dsh-client-ui-sidebar'],
-    },
-  },
+  dsh: original.dsh,
   peerDependencies: peers, dependencies,
 }
 await writeFile(resolve(project, 'package.json'), JSON.stringify(manifest, null, 2) + '\n')
-await writeFile(resolve(project, 'cordis.patch.yml'), `- insert:\n    - id: dsh-projects\n      name: ${JSON.stringify(packageName)}\n      config:\n        dataRoot: !!js dshHomePath('projects-stock')\n`)
+await writeFile(resolve(project, 'cordis.patch.yml'), `- insert:\n    - id: dsh-projects\n      name: ${JSON.stringify(packageName)}\n      config:\n        dataRoot: !!js dshHomePath('projects-022')\n`)
 await cp(resolve(repository, 'README.md'), resolve(project, 'README.md'))
 await cp(resolve(repository, 'LICENSE'), resolve(project, 'LICENSE'))
 await cp(resolve(repository, 'THIRD_PARTY_NOTICES.md'), resolve(project, 'THIRD_PARTY_NOTICES.md'))
 const originalNotice = await readFile(resolve(workspace, 'packages/projects/NOTICE.md'), 'utf8')
 await writeFile(resolve(project, 'NOTICE.md'), originalNotice
-  + `\nPublic build ${version} uses DeepSeek Harness ${stockInputs.version} (${stockCommit}). The rc.3 target named above is historical; retained runtime compatibility metadata is ${supportedDshRange}. This public candidate has not been retested on rc.3. Original upstream grants and source records remain under lib/notices.\n`)
+  + `\nPublic build ${version} uses DeepSeek Harness ${stockInputs.version} (${stockCommit}). This package targets only ${supportedDshRange}. Original upstream grants and source records remain under lib/notices.\n`)
 const hostConfig = {
   compilerOptions: {
     target: 'ES2024', module: 'NodeNext', moduleResolution: 'NodeNext', strict: true,
     skipLibCheck: true, composite: true, declaration: true, declarationMap: true,
     rootDir: 'src', outDir: 'lib/types', rewriteRelativeImportExtensions: true,
+    paths: Object.fromEntries(inlineNativeHost.map(specifier => [specifier, [
+      resolve(stock, 'packages/core/tool-executor-ptc/lib/types', specifier.split('/').at(-1).replace(/\.ts$/, '.d.ts')),
+    ]])),
     types: ['node'], lib: ['ES2024'],
   }, files: ['src/stock/index.ts', 'src/stock/types.ts'],
 }
@@ -162,7 +145,8 @@ hostConfig.files = hostProgram.getSourceFiles().filter(file => file.fileName.sta
   .map(file => relative(project, file.fileName))
 await writeFile(resolve(project, 'tsconfig.host.json'), JSON.stringify(hostConfig, null, 2))
 const tsc = resolve(stock, 'node_modules/typescript/bin/tsc')
-execFileSync(process.execPath, [tsc, '-p', resolve(project, 'tsconfig.host.json')], { cwd: project, stdio: 'inherit' })
+const tscNodeArgs = ['--max-old-space-size=8192', tsc]
+execFileSync(process.execPath, [...tscNodeArgs, '-p', resolve(project, 'tsconfig.host.json')], { cwd: project, stdio: 'inherit' })
 const sdkSource = resolve(project, 'src/stock/model/provider-sdk')
 const sdkEmissionRewrites = []
 if (ts.sys.directoryExists(sdkSource)) {
@@ -229,7 +213,7 @@ const clientConfig = {
   include: ['src/stock/client/**/*.ts', 'src/stock/client/**/*.tsx'],
 }
 await writeFile(resolve(project, 'tsconfig.client.json'), JSON.stringify(clientConfig, null, 2))
-execFileSync(process.execPath, [tsc, '-p', resolve(project, 'tsconfig.client.json')], { cwd: project, stdio: 'inherit' })
+execFileSync(process.execPath, [...tscNodeArgs, '-p', resolve(project, 'tsconfig.client.json')], { cwd: project, stdio: 'inherit' })
 if (checkOnly) {
   console.log('Stock Host declarations, official Remote and complete Client types passed.')
 } else {
@@ -383,16 +367,38 @@ await writeFile(resolve(project, 'NOTICE.md'), (await readFile(resolve(project, 
   + '\nGoogle GenAI Node runtime and its required transitive libraries are bundled under lib/vendor; the Google/Vertex providers remain available. Original package metadata, licenses, notices and input hashes are preserved under lib/notices/bundled. Only Node built-ins and the upstream libraries\' optional acceleration/color probes remain external to that runtime.\n')
 
 const hostModules = new Set()
+const nativeHostInputs = new Set()
+const nativeHostSourceRoot = resolve(stock, 'packages/core/tool-executor-ptc/src')
 await build({ config: false, cwd: project, entry: { index: 'lib/types/stock/index.js' },
   outDir: generated, format: 'esm', platform: 'node', target: 'es2024',
   dts: false, clean: false, fixedExtension: false,
-  deps: { neverBundle: [/^@deepseek-ai\//] },
-  plugins: [collectBundledInputs('projects-host-bundle-inputs', hostModules), { name: 'projects-shared-google-runtime', resolveId(source, importer) {
+  deps: {
+    neverBundle: specifier => specifier.startsWith('@deepseek-ai/') && !inlineNativeHost.includes(specifier),
+    alwaysBundle: specifier => inlineNativeHost.includes(specifier),
+  },
+  plugins: [collectBundledInputs('projects-host-bundle-inputs', hostModules), {
+    name: 'projects-native-host-source-inputs', generateBundle(_options, bundle) {
+      for (const value of Object.values(bundle)) {
+        if (value.type !== 'chunk') continue
+        for (const [id, rendered] of Object.entries(value.modules)) {
+          if (rendered.renderedLength > 0 && id.startsWith(nativeHostSourceRoot + '/')) nativeHostInputs.add(id)
+        }
+      }
+    },
+  }, { name: 'projects-shared-google-runtime', resolveId(source, importer) {
     if (importer && source.startsWith('.') && resolve(dirname(importer), source) === googleRuntime) {
       return { id: './vendor/google-genai.js', external: true }
     }
   } }],
 })
+const nativeHostSources = {
+  runtime: 'lib/index.js', stockCommit, entries: inlineNativeHost,
+  files: Object.fromEntries(await Promise.all([...nativeHostInputs].sort().map(async file => [
+    relative(stock, file), createHash('sha256').update(await readFile(file)).digest('hex'),
+  ]))),
+}
+await mkdir(resolve(generated, 'notices/native-host-sources'), { recursive: true })
+await writeFile(resolve(generated, 'notices/native-host-sources/SOURCES.json'), JSON.stringify(nativeHostSources, null, 2) + '\n')
 const hostBundledThirdParty = await writeBundledNotices(hostModules, 'notices/host-bundled', { runtime: 'lib/index.js' })
 if (process.platform === 'darwin') {
   const nativeArgs = [resolve(project, 'src/features/schedule/power-darwin/build.mjs'),
@@ -533,6 +539,7 @@ const report = {
   sdkEmissionRewrites,
   googleRewrites, bundledThirdParty, hostBundledThirdParty, clientBundledThirdParty,
   inlineNativeProtocol,
+  nativeHostSources,
   sourceInputs: sourcesFile,
   buildScriptSha256: createHash('sha256').update(await readFile(fileURLToPath(import.meta.url))).digest('hex'),
   buildTools: stockInputs.tools,

@@ -17,42 +17,44 @@ DeepSeek Harness 的本地项目协作插件，将多会话协作、长期上下
 
 ## 版本与环境
 
-当前预览版本为 `0.1.0-beta.4`。
+当前版本为 `0.1.0-beta.4`。
 
 本版变化、实际受测范围与已知限制见 [Release 说明](https://github.com/ZadAnthony/DSH-Projects/releases/tag/v0.1.0-beta.4)。构建检查与实际安装分别说明；不从历史版本推定本版全部通过。模型理解和实际使用效果尚未验证。
 
 ## 安装
 
+仅支持 DSH `0.2.2-rc.3` 的新版 Projects 资料；旧宿主与旧 Projects 资料迁移不在本版支持范围。
+
 插件包名为 `dsh-projects-zad`，提供 npm 和 GitHub Release 两种预编译安装包。准确版本及 SHA-256 校验值见 [Releases](https://github.com/ZadAnthony/DSH-Projects/releases/tag/v0.1.0-beta.4)，仓库源码链接不作直接安装入口。
 
-**在 DSH「发现」页安装**：在 DSH `0.2.1-rc.5` 的 **插件 → 实验性插件 → 更多** 中启用 **自定义插件市场**，进入 **发现 → 添加索引源**，填入下面的项目索引地址，再搜索 **DSH Projects** 并确认安装。该索引由本项目维护，只列出本插件。
+**在 DSH「发现」页安装**：在 DSH `0.2.2-rc.3` 的 **插件 → 实验性插件 → 更多** 中启用 **自定义插件市场**，进入 **发现 → 添加索引源**，填入下面的项目索引地址，再搜索 **DSH Projects** 并确认安装。该索引由本项目维护，只列出本插件。
 
 ```text
 https://raw.githubusercontent.com/ZadAnthony/DSH-Projects/main/market/index.json
 ```
 
-DSH 默认没有配置目录，启用功能后仍需添加索引源。已有社区目录的收录和同步由该目录维护者负责；项目索引可以直接使用。发现页及安装行为见 [DSH 官方说明](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.1-rc.5/docs/user/guide/plugin-market.zh.md)。
+DSH 默认没有配置目录，启用功能后仍需添加索引源。已有社区目录的收录和同步由该目录维护者负责；项目索引可以直接使用。发现页及安装行为见 [DSH 官方说明](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.2-rc.3/docs/user/guide/plugin-market.zh.md)。
 
-**Desktop 直接安装**：在 DSH `0.2.1-rc.5` App 中打开 **插件 → 添加插件 → 安装第三方插件**，填写 `dsh-projects-zad@0.1.0-beta.4`，或粘贴以下 GitHub 安装包 URL；安装后点击 **立即启用**。正常退出并重开 App，在插件详情核对包名、`0.1.0-beta.4`、安装来源与运行状态。
+**Desktop 直接安装**：在 DSH `0.2.2-rc.3` App 中打开 **插件 → 添加插件 → 安装第三方插件**，填写 `dsh-projects-zad@0.1.0-beta.4`，或粘贴以下 GitHub 安装包 URL；安装后点击 **立即启用**。正常退出并重开 App，在插件详情核对包名、`0.1.0-beta.4`、安装来源与运行状态。
 
 ```text
 https://github.com/ZadAnthony/DSH-Projects/releases/download/v0.1.0-beta.4/dsh-projects-0.1.0-beta.4.tgz
 ```
 
-**从旧包升级**：早期版本使用 `@local/dsh-projects`，与新包是不同的安装身份。先正常停止相关任务、退出宿主并备份资料，再沿正常管理器卸载旧包、安装新版，避免同时启用两者。正常卸载保留 Projects 数据；继续使用原 `dataRoot`，项目 ID 与存储格式不变。按 `id: dsh-projects` 保存的配置继续沿用；自定义 patch 若显式写了旧模块名 `@local/dsh-projects`，需同步改为 `dsh-projects-zad`。不要删除资料目录。
+**从早期 Projects 切换**：本版只支持 DSH `0.2.2-rc.3`，使用新的 Projects 资料目录，不读取或迁移旧 Projects 资料。正常停止相关任务并退出宿主，沿插件管理器更新 `dsh-projects-zad`；仍使用早期 `@local/dsh-projects` 的用户先正常卸载旧包再安装新版，避免同时启用两个包。新默认目录为当前 `DSH_HOME` 下的 `projects-022`，旧 `projects-stock` 目录保留。若已有 `id: dsh-projects` 配置显式指定 `dataRoot`，首次切换时应改到新的空 Projects 目录，并保留其他必要配置；显式旧模块名需同步为 `dsh-projects-zad`。仅切换 Projects 资料位置，无需更换整个 `DSH_HOME` 或删除 DSH 原生会话和旧资料。
 
 **Web**：准备 Node.js 24 和可在终端运行的 `pnpm`，先正常停止已有 Web 服务，再运行：
 
 ```sh
-npx --yes @deepseek-ai/dsh@0.2.1-rc.5 plugin --profile web add dsh-projects-zad@0.1.0-beta.4
-npx --yes @deepseek-ai/dsh@0.2.1-rc.5 web
+npx --yes @deepseek-ai/dsh@0.2.2-rc.3 plugin --profile web add dsh-projects-zad@0.1.0-beta.4
+npx --yes @deepseek-ai/dsh@0.2.2-rc.3 web
 ```
 
-打开终端给出的地址，从左侧 **Projects** 进入。后续启动只需第二条命令；终端按 `Ctrl+C` 正常停止服务，关闭浏览器页面不会停止后台。插件安装和启动遵循 DSH 的[官方安装合同](https://github.com/deepseek-ai/deepseek-harness/blob/b830ec950faba0a46dda564be3e2d854afed94f1/docs/user/develop/basic/publish.zh.md)与[CLI 说明](https://github.com/deepseek-ai/deepseek-harness/blob/b830ec950faba0a46dda564be3e2d854afed94f1/apps/cli/reference/README.zh.md)。
+打开终端给出的地址，从左侧 **Projects** 进入。后续启动只需第二条命令；终端按 `Ctrl+C` 正常停止服务，关闭浏览器页面不会停止后台。插件安装和启动遵循 DSH 的[官方安装合同](https://github.com/deepseek-ai/deepseek-harness/blob/38a6a5c965aa99ab525161efb7cc5cf1fe62fced/docs/user/develop/basic/publish.zh.md)与[CLI 说明](https://github.com/deepseek-ai/deepseek-harness/blob/38a6a5c965aa99ab525161efb7cc5cf1fe62fced/apps/cli/reference/README.zh.md)。
 
 ## 首次配置与使用
 
-1. 在 DSH **设置 → 模型**中配置提供商、凭据和可用模型，详见[官方模型配置说明](https://github.com/deepseek-ai/deepseek-harness/blob/b830ec950faba0a46dda564be3e2d854afed94f1/docs/user/guide/providers.zh.md)。工作会话在各自的模型选择器中选模型。
+1. 在 DSH **设置 → 模型**中配置提供商、凭据和可用模型，详见[官方模型配置说明](https://github.com/deepseek-ai/deepseek-harness/blob/38a6a5c965aa99ab525161efb7cc5cf1fe62fced/docs/user/guide/providers.zh.md)。工作会话在各自的模型选择器中选模型。
 2. 为 Projects 配置两个后台模型：`memoryModel` 用于共享记忆整理，`sessionManagerModel` 用于主会话接力判断。两者可以使用同一个可用模型，需分别填写。
 3. 创建项目，填写名称并按需选择工作区。在主会话说明目标、范围和需要完成的工作；需要时进入执行会话直接交流。创建空会话本身不会启动模型工作。
 
@@ -63,7 +65,7 @@ npx --yes @deepseek-ai/dsh@0.2.1-rc.5 web
 ```yaml
 - id: dsh-projects
   config:
-    dataRoot: !!js dshHomePath('projects-stock')
+    dataRoot: !!js dshHomePath('projects-022')
     memoryModel:
       provider: "替换为提供商ID"
       model: "替换为记忆模型ID"
@@ -72,7 +74,7 @@ npx --yes @deepseek-ai/dsh@0.2.1-rc.5 web
       model: "替换为接力判断模型ID"
 ```
 
-**`config` 会整体替换，不会逐字段合并。** 必须保留 `dataRoot` 及已有的其他必要字段。默认数据目录是当前 `DSH_HOME` 下的 `projects-stock`；修改 `dataRoot` 只会切换读取位置，不会迁移旧资料。保存后正常重启当前端。
+**`config` 会整体替换，不会逐字段合并。** 必须保留 `dataRoot` 及已有的其他必要字段。默认数据目录是当前 `DSH_HOME` 下的 `projects-022`；修改 `dataRoot` 只会切换读取位置，不会迁移旧资料。保存后正常重启当前端。
 
 模型凭据继续由 DSH 管理，不写入上面的 Projects 配置。缺少专用后台模型时，界面会提示；主会话与执行会话仍可使用，自动记忆整理和接力判断无法正常运行，插件不会自行改用工作会话模型。
 
