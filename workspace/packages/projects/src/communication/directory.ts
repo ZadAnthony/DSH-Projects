@@ -1,4 +1,5 @@
 /** Communication queries select record metadata before touching canonical bodies. */
+import type {} from '@deepseek-ai/dsh-tool-executor-ptc/types'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import { isAppendSurfaceEvent } from '@deepseek-ai/dsh-session/surface'
 import type { RetainedNativeDirectory } from '../source-reader.ts'

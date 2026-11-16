@@ -59,7 +59,7 @@ export interface FullProjectClientRemotePort extends ProjectClientRemotePort {
   uiSubagentAddress(request: ProjectUiTarget, signal?: AbortSignal): Promise<RemoteResult<SubagentAddress | undefined>>
   uiSubagentCatalog(request: ProjectUiTarget, signal?: AbortSignal): Promise<RemoteResult<readonly ProjectUiSubagentInfo[]>>
   uiSubagentPrompt(request: ProjectUiSubagentPromptRequest, signal?: AbortSignal): ReturnType<ClientRemote['subagents']['prompt']>
-  uiSubagentInterrupt(request: ProjectUiSubagentInterruptRequest): ReturnType<ClientRemote['subagents']['interruptByParent']>
+  uiSubagentInterrupt(request: ProjectUiSubagentInterruptRequest): ReturnType<ClientRemote['subagents']['interruptByUser']>
   uiPermissionCatalog: ClientRemote['permissionPresets']['catalog']
   uiAgentPresetList: ClientRemote['agentPresets']['list']
   uiAgentPresetSelect(request: ProjectUiAgentPresetSelectRequest): ReturnType<ClientRemote['agentPresets']['select']>
@@ -69,7 +69,7 @@ export interface FullProjectClientRemotePort extends ProjectClientRemotePort {
   uiJobKill(request: ProjectUiJobKillRequest): ReturnType<ClientRemote['job']['kill']>
 }
 
-export type ProjectRefreshEvent = 'commands/change' | 'agent-preset/selected' | 'llm/adapters-updated'
+export type ProjectRefreshEvent = 'commands/change' | 'agent-preset/selected' | 'llm/adapters-updated' | 'llm/models-updated'
   | 'settings/document-updated' | 'credentials/record-updated' | 'credentials/reference-updated' | 'permission-presets/catalog-changed'
 export type ProjectClientRefreshFrame = {
   [Event in ProjectRefreshEvent]: { readonly type: 'refresh'; readonly event: Event; readonly args: Readonly<Parameters<TypertClientEventListener<Event>>> }

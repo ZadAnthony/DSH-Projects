@@ -25,7 +25,7 @@ Adapted from stock DSH 639ed015397290b3745d163aafe02ffee4aa3f84 packages/llm/llm
 */
 /** Minimal native thinking metadata; durable Harness blocks own all response text. */
 
-import { LlmError } from '@deepseek-ai/dsh-llm'
+import { LlmError, type BuiltinLlmFailureCode } from '@deepseek-ai/dsh-llm'
 import type { Message, ReplayEnvelope } from '@deepseek-ai/dsh-llm'
 
 /** Index-aligned metadata retained alongside each emitted Harness block. */
@@ -39,7 +39,7 @@ export interface ReplayBlock {
  * @param code - owning failure category.
  * @returns the validated object.
  */
-export function object(value: unknown, code = 'MALFORMED_RESPONSE'): Record<string, unknown> {
+export function object(value: unknown, code: BuiltinLlmFailureCode = 'MALFORMED_RESPONSE'): Record<string, unknown> {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
     throw new LlmError('DeepSeek Messages expected a JSON object', code)
   }

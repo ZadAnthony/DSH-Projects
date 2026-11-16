@@ -27,3 +27,10 @@ Local differences:
 `../../draft` contains newly authored Projects ownership and lease adapters. See its README for the required domain integration. `index.ts` is the new finite-template entrypoint.
 
 The rc.3 adapter supplies semantic `bindDraftPersistence`/`persistDraft`, the header's complete injected face and exact-binding draft initialization. These operations use the retained logical editor; appended initialization keeps existing chip nodes and attachment ownership. The native configuration snapshot no longer contains the removed `mode` field.
+
+
+## DSH 0.2.2-rc.3 adapter
+
+Current host contract: `38a6a5c965aa99ab525161efb7cc5cf1fe62fced`; earlier compatibility targets above are historical provenance.
+The logical draft owner and original Projects layout remain. Ordinary sends now hold one `sending` attempt and retain text, reference chips and attachments until the Host's `onAccept` or receipt, matching the current public Session/ConversationController contract. Rejection retains the original draft instead of clearing and reconstructing detached sends. Captured carrier leases remain in force through serialization and dispatch; cancellation and stale bindings cannot retarget a send.
+`client/input/file-intake.ts` is the current upstream document-paste owner, with its public type face derived from `ComposerBarInjected`. Context/usage panels use current CSS anchors. Public Composer slot additions, dictionary keys and current PTC event ownership are adapted without replacing Projects' logical editor or root services.

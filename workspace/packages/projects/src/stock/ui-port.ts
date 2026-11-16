@@ -5,6 +5,7 @@ import type { Agent, ModelSelection as AgentModelSelection } from '@deepseek-ai/
 import AgentDefaultModelConfig from '@deepseek-ai/dsh-agent-default-model'
 import SessionController from '@deepseek-ai/dsh-api-session-controller'
 import RemoteAccessService from '@deepseek-ai/dsh-api-remote-access'
+import TypertGatewayService from '@deepseek-ai/dsh-api-gateway'
 import type {
   ModelCatalog, SessionAttachmentRequest, SessionAttachmentValue, SessionCancelRequest,
   SessionCancelValue, SessionControlFrame, SessionFollowFrame, SessionFollowRequest,
@@ -26,6 +27,7 @@ import { PrivateSessionFetchRegistry } from './ui-host/fetch-registry.ts'
 import { ReadonlySessionHistoryController } from './ui-host/readonly-history.ts'
 import { projectUiHistoryFrame, projectUiHistoryPage } from './ui-host/history-wire.ts'
 import { PrivateSessionInteractions } from './ui-host/interactions.ts'
+import { withProjectAgentParent } from './agent/factory.ts'
 import type {} from './read/index.ts'
 import type {} from '@deepseek-ai/dsh-file-reference'
 import type {} from '@deepseek-ai/dsh-session-reference'
@@ -55,6 +57,7 @@ export type ProjectSessionControlFrame = SessionControlFrame
   | { readonly type: 'status'; readonly sessionId: SessionId; readonly running: boolean }
   | { readonly type: 'error'; readonly sessionId: SessionId; readonly message: string }
   | { readonly type: 'refresh'; readonly event: 'commands/change' | 'llm/adapters-updated' | 'permission-presets/catalog-changed'; readonly args: readonly [] }
+  | { readonly type: 'refresh'; readonly event: 'llm/models-updated'; readonly args: readonly [string] }
   | { readonly type: 'refresh'; readonly event: 'agent-preset/selected'; readonly args: readonly [SessionId, string] }
 
 export interface PrivateSessionDefaultModelPort {
@@ -182,7 +185,7 @@ export async function installPrivateSessionUi(ctx: Context, config: PrivateSessi
   for (const key of ['agents', 'sessions', 'sessionPersistence', 'sessionProjections', 'typert', 'llm', 'fs', 'commands', 'storageDomain', 'projectsRead', 'sandboxPolicy', 'jobs', 'sessionTitle']) {
     if (ctx.get(key) === undefined) throw new Error(`PROJECT_NOT_READY: private Session UI requires ${key}`)
   }
-  for (const key of ['sessionController', 'remoteAccess', 'attachments', 'agentDefaultModel', 'sessionQuery', 'workspaceRegistry', 'connection', 'fileUploads', 'workspaceFiles', 'jobController']) {
+  for (const key of ['sessionController', 'remoteAccess', 'typertGateway', 'attachments', 'agentDefaultModel', 'sessionQuery', 'workspaceRegistry', 'connection', 'fileUploads', 'workspaceFiles', 'jobController']) {
     if (ctx.get(key) !== undefined) throw new Error(`Projects private Session UI provider already exists: ${key}`)
   }
   const home = resolve(config.dataRoot)
@@ -194,13 +197,14 @@ export async function installPrivateSessionUi(ctx: Context, config: PrivateSessi
   const fibers: Fiber[] = [
     ctx.plugin(SqliteSessionQueryEngine, { path: join(home, 'ui-host', 'query.sqlite'), openAt: 'first-search' }),
     await initializeProjectsWorkspaceRegistry(ctx, home, config.startupSignal),
-    ctx.plugin(WorkspaceFiles, { maxBytes: 2 * 1024 * 1024, maxFileBytes: 32 * 1024 * 1024, maxLines: 5000, maxEntries: 2000 }),
+    ctx.plugin(WorkspaceFiles, new WorkspaceFiles.Config()),
     ctx.plugin(JobController, {}),
     ctx.plugin(FileUploads),
     ctx.plugin(RemoteAccessService),
+    ctx.plugin(TypertGatewayService, {}),
     ctx.plugin(SessionController, { nativeOpen: false }),
   ]
-  await Promise.all(fibers.map(fiber => fiber.await()))
+  for (const fiber of fibers) await fiber.await()
   const readonlyHistory = new ReadonlySessionHistoryController(ctx)
   const controller = ctx.sessionController
   if (controller === undefined) throw new Error('PROJECT_NOT_READY: native SessionController did not become ready')
@@ -377,6 +381,7 @@ export async function installPrivateSessionUi(ctx: Context, config: PrivateSessi
         ctx.on('api-session/activity', () => refreshCatalog(false)),
         ctx.on('commands/change', () => queue.push({ type: 'refresh', event: 'commands/change', args: [] })),
         ctx.on('llm/adapters-updated', () => queue.push({ type: 'refresh', event: 'llm/adapters-updated', args: [] })),
+        ctx.on('llm/models-updated', provider => queue.push({ type: 'refresh', event: 'llm/models-updated', args: [provider] })),
         ctx.on('permission-presets/catalog-changed', () => queue.push({ type: 'refresh', event: 'permission-presets/catalog-changed', args: [] })),
         ctx.on('agent-preset/selected', (id, preset) => queue.push({ type: 'refresh', event: 'agent-preset/selected', args: [id, preset] })),
       ]
@@ -490,9 +495,11 @@ export async function installPrivateSessionUi(ctx: Context, config: PrivateSessi
     rename: input => { const request = structuredClone(input); return write(request, () => controller.rename(request)) },
     attachment: request => track(async () => {
       await assertTarget(request.sessionId, 'read')
-      const result = await attachments.runFor(request.sessionId, () => controller.attachment(request))
+      // 新原生入口只校验 bytes，不再查日志。Projects 继续让已有读取 owner
+      // 核对精确的已记录引用，避免把残留文件误当成当前会话的可读资料。
+      const stored = await ctx.projectsRead.readAttachment(request.sessionId, { kind: 'image', ref: request.attachment, signal: shutdown.signal })
       await assertTarget(request.sessionId, 'read')
-      return result
+      return { attachment: request.attachment, data: Buffer.from(stored.data).toString('base64') }
     }),
     search: (request, signal) => track(async () => {
       const value = await controller.search(structuredClone(request), lifetime(signal))
@@ -659,15 +666,21 @@ export async function installPrivateSessionUi(ctx: Context, config: PrivateSessi
         const provider = ctx.get('subagents')
         if (provider === undefined) throw new Error('PROJECT_UI_CAPABILITY_UNAVAILABLE: subagents')
         await assertTarget(request.parentSessionId, 'write')
-        return attachments.runFor(request.childSessionId, () => provider.prompt(request, lifetime(signal)))
+        const parent = await agentFor(request.parentSessionId, 'write', signal)
+        return withProjectAgentParent(parent, () => attachments.runFor(request.childSessionId, () => provider.prompt(request, lifetime(signal))))
       })
     },
     subagentInterrupt: input => {
       const request = structuredClone(input)
-      return write({ sessionId: request.parentSessionId, readonly: request.readonly, carrier: request.carrier }, () => {
+      return write({ sessionId: request.parentSessionId, readonly: request.readonly, carrier: request.carrier }, async () => {
         const provider = ctx.get('subagents')
         if (provider === undefined) throw new Error('PROJECT_UI_CAPABILITY_UNAVAILABLE: subagents')
-        return provider.interruptByParent(request.childSessionId, request.parentSessionId, request.mode)
+        if (config.subagentAddress === undefined) throw new Error('PROJECT_UI_CAPABILITY_UNAVAILABLE: subagentAddress')
+        const address = await config.subagentAddress(request.childSessionId)
+        if (address?.parentSessionId !== request.parentSessionId || address.mode !== request.mode) throw new Error('PROJECT_UI_SCOPE: child address is not the exact continuable owner')
+        const parent = await agentFor(request.parentSessionId, 'write')
+        provider.interrupt(request.childSessionId, { kind: 'ancestor', agent: parent })
+        return { accepted: true }
       })
     },
     jobList(request, signal) {

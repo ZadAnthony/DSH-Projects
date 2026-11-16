@@ -2,7 +2,6 @@
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { defineTool, ToolArgsError, validateJsonSchemaValue } from '@deepseek-ai/dsh-tools'
 import type { ObjectJsonSchema, ToolDefinition, ToolRunContext } from '@deepseek-ai/dsh-tools'
-import type {} from '@deepseek-ai/dsh-tools/types'
 import type { JsonValue } from '@deepseek-ai/dsh-util-values'
 import type { ProjectSessionRole, ProjectUpdateResult } from './records-types.ts'
 import type { ProjectUsageQuery, ProjectUsageResult } from './features/usage/contract.ts'

@@ -1,3 +1,4 @@
+import type {} from '@deepseek-ai/dsh-tool-executor-ptc/types'
 import type { Context } from "@deepseek-ai/cordis";
 import { BlockAssembler, expandAssistantStream, type AssistantStreamRecord } from "@deepseek-ai/dsh-llm";
 import { decodeNativeProjectSource } from "./native-source.ts";

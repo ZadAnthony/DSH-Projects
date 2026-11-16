@@ -1,4 +1,5 @@
 /** Host-only reads of the two saved chat copies. No client snapshot or write path. */
+import type {} from '@deepseek-ai/dsh-tool-executor-ptc/types'
 import { isAbsolute } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import { SessionId, type SessionEvent } from '@deepseek-ai/dsh-session'

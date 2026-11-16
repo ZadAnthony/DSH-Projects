@@ -4,7 +4,7 @@ import {
   IconAgentPresetOutlineRegular, IconApiOutlineRegular, IconBrowseOutlineRegular, IconChevronDownOutlineRegular,
   IconChevronUpOutlineRegular, IconCodeOutlineRegular, IconEditOutlineRegular, IconGlobeOutlineRegular,
   IconPlanOutlineRegular, IconQuestionOutlineRegular, IconSearchOutlineRegular, IconSparkleRegular,
-  IconThinkOutlineRegular, TextShimmer,
+  IconThinkOutlineRegular, IconContextInjectionOutlineRegular, TextShimmer,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { GroupKey, NodeReference } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { ProcessActivity } from '../contract/process-groups.ts'
@@ -29,13 +29,14 @@ const PROCESS_TITLE_MINIMUM_MS = 150
 type ProcessTitleActivity = ProcessActivity | 'thinking'
 
 interface LiveProcessTitle {
-  readonly activity: ProcessTitleActivity
+  readonly activity: Exclude<ProcessTitleActivity, 'context'>
   readonly detail: string
   readonly preparing: boolean
 }
 
 const PROCESS_ICONS: Record<ProcessTitleActivity, ReactNode> = {
   thinking: <IconThinkOutlineRegular />,
+  context: <IconContextInjectionOutlineRegular />,
   read: <IconBrowseOutlineRegular size={14} />,
   readImage: <IconBrowseOutlineRegular size={14} />,
   search: <IconSearchOutlineRegular size={14} />,

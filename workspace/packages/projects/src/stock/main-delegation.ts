@@ -37,7 +37,7 @@ export const ProjectsSubagentTool = {
       if (installing.has(agent)) return
       installing.add(agent)
       try {
-        const fiber = agent.ctx.inject(NativeSubagentTool.inject, nativeCtx => NativeSubagentTool.apply(nativeCtx, config, agent.session))
+        const fiber = agent.ctx.inject(NativeSubagentTool.inject, nativeCtx => NativeSubagentTool.apply(nativeCtx, config))
         installations.set(agent, fiber)
         return fiber
       } finally { installing.delete(agent) }

@@ -1,4 +1,5 @@
 /** 完整快照只保存在发送方和接收方各自的原生聊天记录。 */
+import type {} from '@deepseek-ai/dsh-tool-executor-ptc/types'
 import type { Context } from '@deepseek-ai/cordis';
 import type { Agent } from '@deepseek-ai/dsh-agent';
 import type { SessionEvent } from '@deepseek-ai/dsh-session';

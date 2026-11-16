@@ -16,12 +16,12 @@ import {
 
 export const PROJECT_JOURNAL_FORMAT = 'projects-session-journal/v1'
 export const PROJECT_DATA_FORMAT = 'projects-data/v1'
-export const STOCK_SESSION_VERSION = '0.2.1-rc.3'
-export type SupportedStockSessionVersion = '0.2.0-rc.2' | typeof STOCK_SESSION_VERSION
+export const STOCK_SESSION_VERSION = '0.2.2-rc.3'
+export type SupportedStockSessionVersion = typeof STOCK_SESSION_VERSION
 
 /** Exact birth-version admission; the native v4 validator still owns every payload. */
 export function isSupportedStockSessionVersion(value: unknown): value is SupportedStockSessionVersion {
-  return value === '0.2.0-rc.2' || value === STOCK_SESSION_VERSION
+  return value === STOCK_SESSION_VERSION
 }
 
 /** Business membership is supplied by the Projects owner, never inferred from cwd. */

@@ -9,6 +9,8 @@ import { SessionId } from '@deepseek-ai/dsh-session'
 import type { SessionHeader } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-permission-presets'
 import type {} from '@deepseek-ai/dsh-plan-mode'
+import { planProjectionDefinition } from '@deepseek-ai/dsh-plan-mode'
+import type { PlanUnitState } from '@deepseek-ai/dsh-plan-mode/types'
 import type {} from '@deepseek-ai/dsh-agent-preset-registry'
 import { setSandboxMode } from '@deepseek-ai/dsh-sandbox-policy'
 import { setApprovalPolicy } from '@deepseek-ai/dsh-user-approval'
@@ -56,10 +58,13 @@ export async function readMainNativePolicy(agent: Agent) {
       || plan === undefined && event.type === 'plan/mode')) throw new Error('A current main policy owner is unavailable for its durable configuration.')
   }
   const policy = sandbox?.resolve({ session: agent.session }), planValue = plan?.get(agent)
-  const projections = ctx.get('sessionProjections')
-  if (projections === undefined) throw new Error('Native policy projections are unavailable.')
-  const planState = plan === undefined ? undefined : projections.stateOf(agent.session, 'plan')
-  if (plan !== undefined && planState === undefined) throw new Error('The native plan configuration projection is unavailable.')
+  // wire只暴露active/pending；原生日志fold保留发布前必须结清的wanted/running责任。
+  let planState: PlanUnitState | undefined
+  if (plan !== undefined) {
+    let current: PlanUnitState = planProjectionDefinition.init()
+    for (const event of agent.session.snapshotEvents()) current = planProjectionDefinition.apply(current, event)
+    planState = current
+  }
   return {
     permissionPreset: permission?.current(agent.session) ?? null,
     sandbox: policy === undefined ? null : { mode: policy.mode, workspaceRoot: policy.workspaceRoot },
@@ -116,8 +121,7 @@ export class MainContinuityNative {
     const nativePolicy = await readMainNativePolicy(from)
     assertSettledMainPolicy(nativePolicy)
     ports.assertValid(); signal.throwIfAborted()
-    const selected = this.ctx.sessionProjections.stateOf(from.session, 'modelSelection')
-    const route = selected?.pending ?? selected?.lastUsed
+    const route = from.model.current()
     if (route === undefined || route === null) throw new Error('Current main effective model selection is unavailable.')
     const config = dshNewProjectSessionConfiguration({ provider: route.provider, model: route.model,
       ...(route.reasoningEffort === undefined ? {} : { reasoningEffort: ReasoningEffortId(route.reasoningEffort) }) })

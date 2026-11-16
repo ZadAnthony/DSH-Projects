@@ -51,6 +51,7 @@ import type {
   ContentBlock, FinishReason, GenerateOptions, Message, RequestMessage, TokenUsage, ToolSchema,
 } from '@deepseek-ai/dsh-llm'
 import type { Agent } from '@deepseek-ai/dsh-agent'
+import type { ResolvedToolSet } from '@deepseek-ai/dsh-tools'
 import { PROJECT_COMPACTION_INSTRUCTION } from '../../prompts/catalog.generated.ts'
 
 interface SummaryConfig {
@@ -129,12 +130,7 @@ export async function summarizeWithLlm(
   const configured = config.summarizationProvider.length === 0
     ? undefined
     : { provider: config.summarizationProvider, model: config.summarizationModel }
-  const agentTarget = agent.options.provider !== undefined
-    && agent.options.provider.length > 0
-    && agent.options.model !== undefined
-    && agent.options.model.length > 0
-    ? { provider: agent.options.provider, model: agent.options.model }
-    : undefined
+  const agentTarget = agent.model.current()
   const target = configured ?? latest ?? agentTarget
   if (target === undefined) {
     throw new Error(
@@ -152,11 +148,14 @@ export async function summarizeWithLlm(
   const lease=await hooks?.beforePrepare?.({agent,turn,step,attempt,signal:abort})
   const assembler = new BlockAssembler()
   let options!:GenerateOptions
+  const selection = { provider: target.provider, model: target.model }
+  let toolSet: ResolvedToolSet | undefined
   try {
+    toolSet = await agent.ctx.tools.resolve({ agent, modelSelection: selection, signal: abort })
     const call=await ctx.llm.prepareCall({provider:target.provider,model:target.model,maxTokens:config.maxTokens},abort)
     const prepareInput={agent,turn,step,attempt,signal:abort,purpose:'compaction' as const,config:call.config,context:call.context}
     const prepared=hooks?.prepare?await prepareProjectRequest(hooks,prepareInput):await prepareProjectHarness(prepareInput)
-    const assembly=await agent.ctx.systemPrompt.assemble(assembleContextFor(agent,abort))
+    const assembly=await agent.ctx.systemPrompt.assemble({...assembleContextFor(agent,abort),modelSelection:selection,toolSet})
     const sections=renderContextSections(assembly)
     const selectedIds=new Set(input.messages.map(message=>message.id))
     const allowed=prepared.historySeqs===undefined?undefined:new Set(prepared.historySeqs)
@@ -186,6 +185,7 @@ export async function summarizeWithLlm(
       for await(const chunk of call.stream(options))assembler.push(chunk)
     })
   } finally {
+    toolSet?.dispose()
     try { await agent.ctx.sessions.flush(agent.session) } finally { await lease?.[Symbol.asyncDispose]() }
   }
   const error = finishError(assembler.finish)
@@ -212,7 +212,7 @@ function finishError(finish: FinishReason): Error | undefined {
   switch (finish.kind) {
     case 'error':
     case 'aborted': {
-      return new LlmError(finish.failure.message, finish.failure.code, finish.failure)
+      return LlmError.fromFailure(finish.failure)
     }
     case 'max-tokens': {
       const error = new Error('summarization truncated at the token cap (incomplete checkpoint)') as Error & { code?: string }
@@ -301,7 +301,7 @@ export class ProjectsCompactionEngine extends BasicCompactionEngine {
   }
   protected override summarize(input:SummarizationInput,agent:Agent,signal?:AbortSignal):Promise<SummaryResult>{
     const latest=agent.session.requestHeader()?.config
-    const route=latest??agent.options
+    const route=latest??{...agent.options,...agent.model.current()}
     const override=this.config.modelPolicies.find(policy=>policy.provider===route.provider&&policy.model===route.model)
     return summarizeWithLlm(this.ctx,{summarizationProvider:override?.summarizationProvider??this.config.summarizationProvider,summarizationModel:override?.summarizationModel??this.config.summarizationModel,maxTokens:override?.maxTokens??this.config.maxTokens},input,agent,signal)
   }

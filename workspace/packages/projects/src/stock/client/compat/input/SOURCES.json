@@ -6,7 +6,7 @@
       "path": "packages/client/ui-conversation/src/client/apply.ts",
       "local": "client/apply.ts",
       "sha256": "7f739def8643947ca1c75eb0ec14ba1183c9d91f22f71a4f3f6c175263d3ae9f",
-      "localSha256": "d94d6c5b6c82753beaea965a21896bda35d3217ac9d9e5b3b357a117a57770dc",
+      "localSha256": "1c2f94deff9dae2be2268365136237eb84f67b66e67a9ee4bb0a5c2066006ca3",
       "modified": true
     },
     {
@@ -28,7 +28,7 @@
       "path": "packages/client/ui-conversation/src/client/contract/input.ts",
       "local": "client/contract/input.ts",
       "sha256": "c2b9d003964de6d26b0023636a8f107327af72332166186847d9cf0c7a6312b6",
-      "localSha256": "2d09aadc3eef7834e62dd203fdea4db7c7b566d1e6a6e80c3d08facde95aa13d",
+      "localSha256": "03802f13bb19615d238e6703c13bc592fdda552301a74ac9c8a8d035e7c4d874",
       "modified": true
     },
     {
@@ -39,7 +39,9 @@
     {
       "path": "packages/client/ui-conversation/src/client/input/blocks.ts",
       "local": "client/input/blocks.ts",
-      "sha256": "270ed3eea51aa4e73932e905d2cfabe94d85e8e4f1d0870f3ae7cc08b917126c"
+      "sha256": "270ed3eea51aa4e73932e905d2cfabe94d85e8e4f1d0870f3ae7cc08b917126c",
+      "localSha256": "e34bc930aface0c313141cc2479d0d4f5a90fa6592dc91ea4ddc74a32b72d517",
+      "modified": true
     },
     {
       "path": "packages/client/ui-conversation/src/client/input/decorations.ts",
@@ -118,24 +120,30 @@
     {
       "path": "packages/client/ui-conversation/src/client/input/editor/text-ref.ts",
       "local": "client/input/editor/text-ref.ts",
-      "sha256": "82633d3e8dc432cea8ef4aca28bd95323668b35fea168d7b640b56813278b2bb"
+      "sha256": "82633d3e8dc432cea8ef4aca28bd95323668b35fea168d7b640b56813278b2bb",
+      "localSha256": "e4676da9ba1355ac21298f902ef91e556b79c8c452c1cd3c60b020a250faf6c0",
+      "modified": true
     },
     {
       "path": "packages/client/ui-conversation/src/client/input/editor/view-binding.ts",
       "local": "client/input/editor/view-binding.ts",
-      "sha256": "aadba7dc4bc548f1d679a1e63e9de367cb3fd691ea5540c45ea13c25e83df65f"
+      "sha256": "aadba7dc4bc548f1d679a1e63e9de367cb3fd691ea5540c45ea13c25e83df65f",
+      "localSha256": "78faa104f32b01c1cad606fefb296d3ceb8768c582efcd713bc5cecd04bc2436",
+      "modified": true
     },
     {
       "path": "packages/client/ui-conversation/src/client/input/facade.ts",
       "local": "client/input/facade.ts",
       "sha256": "40516258b5c0d84dfbf2097d5a67234c4a1a6e6a54a7145af3bc944d0adb549f",
-      "localSha256": "eeb0150a2208d8643835553e6905a6bf3cd55f98c017badeef4906572ba112d2",
+      "localSha256": "a0d0e8a42ac4c22afafac8cd4b176c99f469286496d96a37be8753b90600802b",
       "modified": true
     },
     {
       "path": "packages/client/ui-conversation/src/client/input/machine.ts",
       "local": "client/input/machine.ts",
-      "sha256": "ee90776e029bd2af28f4b4f1bdc95999bc1103e2c980b62192146db1ef92f334"
+      "sha256": "ee90776e029bd2af28f4b4f1bdc95999bc1103e2c980b62192146db1ef92f334",
+      "localSha256": "437f8a82040c73abe6700e3592528bb9d3646007f0b82a94c72b11693bea0f1b",
+      "modified": true
     },
     {
       "path": "packages/client/ui-conversation/src/client/input/submission-policy.ts",
@@ -146,7 +154,7 @@
       "path": "packages/client/ui-conversation/src/client/locales.ts",
       "local": "client/locales.ts",
       "sha256": "af432eed0de34bc27258bd383f239c51b02b630f8ad58f6a2c9b6771b34d24f5",
-      "localSha256": "5f866b84c7e47a254ff427a6921a75ba5d0a225899b2adc4279d17a6344adb30",
+      "localSha256": "de83e2a35f356f1f13107bdf39f40eb16ee57e8a01747dede78011d4f2c1c340",
       "commit": "1f81c047fc48fa190a683e469daa699857e9afe8",
       "modified": true
     },
@@ -175,52 +183,72 @@
     {
       "path": "packages/client/ui-conversation/src/client/skeleton/ContextMeter.module.css",
       "local": "client/skeleton/ContextMeter.module.css",
-      "sha256": "e797489423a959481600296afb54578ce8b9c7b5106be752b0e177628ef98bff"
+      "sha256": "e797489423a959481600296afb54578ce8b9c7b5106be752b0e177628ef98bff",
+      "localSha256": "757efa62a45650b8fba0c7b9defb67d439025425e493ddc5d10e34c6a33e8985",
+      "modified": true
     },
     {
       "path": "packages/client/ui-conversation/src/client/skeleton/ContextMeter.tsx",
       "local": "client/skeleton/ContextMeter.tsx",
-      "sha256": "84e568164bb26fadc8cae50d82de7dbd4d14be0d957f5ae7fd9c4575a1f1568d"
+      "sha256": "84e568164bb26fadc8cae50d82de7dbd4d14be0d957f5ae7fd9c4575a1f1568d",
+      "localSha256": "ddf94455e0e3eea412977f78d798ee07b9453a773186031c9d2894ae891d22b6",
+      "modified": true
     },
     {
       "path": "packages/client/ui-conversation/src/client/skeleton/ConversationContent.tsx",
       "local": "client/skeleton/ConversationContent.tsx",
-      "sha256": "3dfcc635e128f9b798673ba4dfb91a5e25ef96d001124603c672e7beafefa204"
+      "sha256": "3dfcc635e128f9b798673ba4dfb91a5e25ef96d001124603c672e7beafefa204",
+      "localSha256": "eb33012e5d59082527ee9db457ec38e147d70d37d9b224706627fb2fe3f4748e",
+      "modified": true
     },
     {
       "path": "packages/client/ui-conversation/src/client/skeleton/ConversationHeader.tsx",
       "local": "client/skeleton/ConversationHeader.tsx",
-      "sha256": "4d8eb123dfcda64d1930ec59402f72b1fcda1f6c63197243a33c52069c57ab94"
+      "sha256": "4d8eb123dfcda64d1930ec59402f72b1fcda1f6c63197243a33c52069c57ab94",
+      "localSha256": "aad6e9261e6069a2437d4e20912cc240b59e73f5b5a3b348f7e657a8b3ba488e",
+      "modified": true
     },
     {
       "path": "packages/client/ui-conversation/src/client/skeleton/ConversationMainPanel.tsx",
       "local": "client/skeleton/ConversationMainPanel.tsx",
-      "sha256": "8329a313114dd3b37842068354dd1cb33327e0a06d2a5bc04108dd7579aabef1"
+      "sha256": "8329a313114dd3b37842068354dd1cb33327e0a06d2a5bc04108dd7579aabef1",
+      "localSha256": "272571118422e9138aa4c1c97ec989125248ac6c293c58f49e9c3a2ce112a49a",
+      "modified": true
     },
     {
       "path": "packages/client/ui-conversation/src/client/skeleton/ConversationPanel.tsx",
       "local": "client/skeleton/ConversationPanel.tsx",
-      "sha256": "d7b63905cb18887648b5cbb1d09d85cae6ec97a0a9e70299602363c56f325b29"
+      "sha256": "d7b63905cb18887648b5cbb1d09d85cae6ec97a0a9e70299602363c56f325b29",
+      "localSha256": "00d888030d717daf2a8f8aa80e31e0f0703ca15d3ee0d82384fd2a119190b559",
+      "modified": true
     },
     {
       "path": "packages/client/ui-conversation/src/client/skeleton/ConversationRoot.module.css",
       "local": "client/skeleton/ConversationRoot.module.css",
-      "sha256": "d9d856868adfdc8a300600e060e6262afa42fc3bfc8019b5a597dec326b0c59c"
+      "sha256": "d9d856868adfdc8a300600e060e6262afa42fc3bfc8019b5a597dec326b0c59c",
+      "localSha256": "594c48be8c40ae7cfce14a07c45c1b5de5d96ef516181526bb0e5df767461951",
+      "modified": true
     },
     {
       "path": "packages/client/ui-conversation/src/client/skeleton/ConversationRoot.tsx",
       "local": "client/skeleton/ConversationRoot.tsx",
-      "sha256": "e423e43755ae1d23e0be314410bc71bdeafae5010a261f511527b486b5b8c3fa"
+      "sha256": "e423e43755ae1d23e0be314410bc71bdeafae5010a261f511527b486b5b8c3fa",
+      "localSha256": "d9f37e7f8b87e5df509163ed2de6ac0b55010ca5b9010c2305b433cc09f590aa",
+      "modified": true
     },
     {
       "path": "packages/client/ui-conversation/src/client/skeleton/ConversationSession.tsx",
       "local": "client/skeleton/ConversationSession.tsx",
-      "sha256": "a7eecaec5677b04fab9f9982ea49ae29267db924d36284f7b3e59a8f5109f72a"
+      "sha256": "a7eecaec5677b04fab9f9982ea49ae29267db924d36284f7b3e59a8f5109f72a",
+      "localSha256": "7487cb37d33bdbc2311cbfcf3719266dd5017a2f6843668b120fcf3114e5526d",
+      "modified": true
     },
     {
       "path": "packages/client/ui-conversation/src/client/skeleton/ConversationWidthControls.tsx",
       "local": "client/skeleton/ConversationWidthControls.tsx",
-      "sha256": "0c2d8cc42f7b41e0362b41f544f76e6ec6e1078b81e1488cfdf45b5308feaec4"
+      "sha256": "0c2d8cc42f7b41e0362b41f544f76e6ec6e1078b81e1488cfdf45b5308feaec4",
+      "localSha256": "cc79f1721391c55be446f213f480747ebd8a2fb73014aff44ef11425dd5ee761",
+      "modified": true
     },
     {
       "path": "packages/client/ui-conversation/src/client/skeleton/DefaultConversationViews.tsx",
@@ -232,7 +260,9 @@
     {
       "path": "packages/client/ui-conversation/src/client/skeleton/EmptyHero.tsx",
       "local": "client/skeleton/EmptyHero.tsx",
-      "sha256": "aae49c5f2a5fd6de8c7d86b57f2fc3ccefc8f01fc925181dd8f674eae657af62"
+      "sha256": "aae49c5f2a5fd6de8c7d86b57f2fc3ccefc8f01fc925181dd8f674eae657af62",
+      "localSha256": "ca9f152ce0263cb05aa6df70717e557d70d8003a2728c891d3d9fa7b28d99770",
+      "modified": true
     },
     {
       "path": "packages/client/ui-conversation/src/client/skeleton/HeroShell.module.css",
@@ -242,12 +272,16 @@
     {
       "path": "packages/client/ui-conversation/src/client/skeleton/InputBar.module.css",
       "local": "client/skeleton/InputBar.module.css",
-      "sha256": "3728d67da4e1d1c2dd102d66f42f0c129a5c1e17e6a1167d738c999d0d87f60b"
+      "sha256": "3728d67da4e1d1c2dd102d66f42f0c129a5c1e17e6a1167d738c999d0d87f60b",
+      "localSha256": "6b0900627977483e1dd066c0a3dd334dc81c104d77f8d51bf1996834a92fa35f",
+      "modified": true
     },
     {
       "path": "packages/client/ui-conversation/src/client/skeleton/InputBar.tsx",
       "local": "client/skeleton/InputBar.tsx",
-      "sha256": "2716aa3582251a5cfbc77268f95c39ebfcf44a4d3c43cd65d0726ddb7a9c7649"
+      "sha256": "2716aa3582251a5cfbc77268f95c39ebfcf44a4d3c43cd65d0726ddb7a9c7649",
+      "localSha256": "48a1c4040c0489075023122c7869efe64bb323bfb191a06e931b9d7860a55328",
+      "modified": true
     },
     {
       "path": "packages/client/ui-conversation/src/client/skeleton/TodoPanel.module.css",
@@ -284,7 +318,9 @@
     {
       "path": "packages/client/ui-conversation/src/client/view-selection.ts",
       "local": "client/view-selection.ts",
-      "sha256": "8eaea9005aa22686355898bdbd5ace2ce6d406010cc6df2bf185cf38f8161668"
+      "sha256": "8eaea9005aa22686355898bdbd5ace2ce6d406010cc6df2bf185cf38f8161668",
+      "localSha256": "c4715b6688c521463e36801f7db0f34b9a1b4d57add888b3e9705316c2e24e5c",
+      "modified": true
     },
     {
       "path": "packages/client/ui-conversation/src/submission-settings.ts",
@@ -302,6 +338,14 @@
       "sha256": "4960383fb80d7aa37bf8947708665148eaf58cff55a15d5d833d0ef759b71043",
       "localSha256": "855117fa87bb269f141b9ca2d6929d925f2e9b055bfb340129b21cf7ecaeec13",
       "modified": true
+    },
+    {
+      "path": "packages/client/ui-conversation/src/client/input/file-intake.ts",
+      "local": "client/input/file-intake.ts",
+      "commit": "38a6a5c965aa99ab525161efb7cc5cf1fe62fced",
+      "sha256": "f815ef96adf73993786a8be823cb3efb869b35592fa38c3ad33e8f8a8e54cfeb",
+      "localSha256": "386ab57276bb0b0d1b4cc91d62d0643b44895a7c619f23b8e7020c522c11e65a",
+      "modified": true
     }
   ],
   "fragments": [
@@ -314,14 +358,9 @@
   ],
   "compatibilityTargets": [
     {
-      "version": "0.2.1-rc.3",
-      "commit": "1f81c047fc48fa190a683e469daa699857e9afe8",
-      "provenance": "Default commit remains the original copied source; individual migrated files override commit. localSha256 records current adaptations."
-    },
-    {
-      "version": "0.2.1-rc.5",
-      "commit": "b830ec950faba0a46dda564be3e2d854afed94f1",
-      "provenance": "Public SDK input; installed App runtime identity is recorded separately. Locale namespace owner is the selected published SDK; local dictionary content is unchanged."
+      "version": "0.2.2-rc.3",
+      "commit": "38a6a5c965aa99ab525161efb7cc5cf1fe62fced",
+      "provenance": "Only current host is targeted. Copied-source defaults retain their historical provenance; localSha256 records this adapter."
     }
   ]
 }

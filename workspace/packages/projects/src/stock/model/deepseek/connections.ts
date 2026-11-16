@@ -49,7 +49,7 @@ type ConnectionHooks = Pick<DeepSeekAdapterOptions<ProjectsDeepSeekConnection>, 
  * this graph owns only a credential-scoped listing cache and detached DTOs.
  * Catalog loads consume no model inference and are released with this graph.
  */
-export function createDeepSeekConnectionHooks(ctx: Context, snapshot: ProjectsProviderSnapshot): ConnectionHooks {
+export function createDeepSeekConnectionHooks(ctx: Context, snapshot: ProjectsProviderSnapshot, isCurrent: () => boolean): ConnectionHooks {
   const configuration = structuredClone(snapshot.configuration)
   const environment = launchEnvironmentOf(ctx)
   const diagnostics = {
@@ -85,7 +85,8 @@ export function createDeepSeekConnectionHooks(ctx: Context, snapshot: ProjectsPr
         return new LlmError(error.message, 'ACCOUNT_TOKEN_INVALID', { ...error.failure, cause: error })
       } }
     }
-    const listings = new ModelListingCache({ ...diagnostics,
+    const listings = new ModelListingCache({ ...diagnostics, settings: () => isCurrent() ? settings.catalog : undefined,
+      changed: () => ctx.emit('llm/models-updated', snapshot.route),
       credential: async url => account()?.resolveToken(url),
       load: (url, token, signal) => requestModelListing(url, { 'x-dsh-auth-token': token }, signal) })
     ctx.effect(() => () => listings.dispose(), 'projects.deepseek-account-model-listing')
@@ -111,7 +112,8 @@ export function createDeepSeekConnectionHooks(ctx: Context, snapshot: ProjectsPr
     try { return await resolveApiKey() }
     catch (error) { if (error instanceof LlmError && error.code === 'MISSING_CREDENTIAL') return undefined; throw error }
   }
-  const listings = new ModelListingCache({ ...diagnostics, credential: presentApiKey,
+  const listings = new ModelListingCache({ ...diagnostics, settings: () => isCurrent() ? connection.listing : undefined,
+    changed: () => ctx.emit('llm/models-updated', snapshot.route), credential: presentApiKey,
     load: (url, apiKey, signal) => requestModelListing(url, { 'x-api-key': apiKey }, signal) })
   ctx.effect(() => () => listings.dispose(), 'projects.deepseek-api-key-model-listing')
   const connectionOf = (view?: ListingView) => catalogOf(connection, view)

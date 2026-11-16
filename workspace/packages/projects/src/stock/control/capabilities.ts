@@ -11,6 +11,7 @@ import SubagentRuntime, {
 } from '@deepseek-ai/dsh-subagent'
 import PtcWorkflowEngine from '@deepseek-ai/dsh-workflow-ptc'
 import type { WorkflowRun, WorkflowStartRequest } from '@deepseek-ai/dsh-workflow'
+import { projectAgentParent, withProjectAgentParent } from '../agent/factory.ts'
 
 export interface StockCapabilityResponsibility {
   readonly owner: Agent
@@ -134,7 +135,7 @@ export function createOwnedStockCapabilities(ownership: StockCapabilityOwnership
     override startActivation(spec: SubagentActivationSpec & { readonly childId: SessionId }): Promise<SubagentActivation & { readonly messageId: MessageId }>
     override startActivation(spec: SubagentActivationSpec): Promise<SubagentActivation>
     override startActivation(spec: SubagentActivationSpec): Promise<SubagentActivation> {
-      const owner = spec.request.parent
+      const owner = spec.parent
       try { ownership.assertAdmitting(owner.id, owner) }
       catch (error) { return Promise.reject(error) }
       const controller = new AbortController()
@@ -152,7 +153,7 @@ export function createOwnedStockCapabilities(ownership: StockCapabilityOwnership
       // Register before invoking the provider: it may start resources before
       // its first await or synchronously reenter a control operation.
       ownership.track({ owner, kind: 'subagent', cancel, done: completion.promise })
-      pending = super.startActivation({ ...spec, signal }).then(run => {
+      pending = withProjectAgentParent(owner, () => super.startActivation({ ...spec, signal })).then(run => {
         published = ownedRun(run)
         void published.done.then(completion.resolve, completion.reject)
         // Native activations settle their result after managed teardown. Join
@@ -160,8 +161,7 @@ export function createOwnedStockCapabilities(ownership: StockCapabilityOwnership
         void run.result.then(() => published!.dispose(), () => published!.dispose()).catch(() => undefined)
         if (controller.signal.aborted) void published.dispose().catch(() => undefined)
         return {
-          childId: run.childId,
-          ...run.messageId === undefined ? {} : { messageId: run.messageId },
+          ...run,
           result: expose(run.result, ownership, owner, 'subagent', cancel),
           dispose: published.dispose,
         }
@@ -175,14 +175,15 @@ export function createOwnedStockCapabilities(ownership: StockCapabilityOwnership
     override sendMessage(sender: Agent, targetId: SessionId, content: ContentBlock[],
       options: SubagentSendMessageOptions): Promise<MessageId> {
       return this.admitted(sender, options.signal,
-        signal => super.sendMessage(sender, targetId, content, { ...options, signal }))
+        signal => withProjectAgentParent(this.rootOf(sender), () => super.sendMessage(sender, targetId, content, { ...options, signal })))
     }
 
     override prompt(request: SubagentPromptRequest, signal: AbortSignal): Promise<SubagentPromptReceipt> {
-      const parent = this.ctx.agents.get(request.parentSessionId)
+      const child = this.ctx.agents.get(request.childSessionId)
+      const parent = projectAgentParent() ?? (child === undefined ? undefined : this.rootOf(child))
       // Preserve the native request validation/unavailable errors.
       if (parent === undefined) return super.prompt(request, signal)
-      return this.admitted(parent, signal, admitted => super.prompt(request, admitted))
+      return this.admitted(parent, signal, admitted => withProjectAgentParent(parent, () => super.prompt(request, admitted)))
     }
 
     private admitted<T>(owner: Agent, signal: AbortSignal, begin: (signal: AbortSignal) => Promise<T>): Promise<T> {

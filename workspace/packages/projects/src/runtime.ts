@@ -463,13 +463,13 @@ export class ProjectsRuntime implements ProjectToolRuntime {
       configuration: async (agent, membership) => {
         const instructions = (await this.features.settings.prepareSessionInstructions({ projectId: membership.project.id, sessionId: membership.session.id })).get()
         if (!instructions.available) throw new Error('Current main instructions are unavailable.')
-        return createHash('sha256').update(JSON.stringify({ selection: this.ctx.sessionProjections.stateOf(agent.session, 'modelSelection'),
+        return createHash('sha256').update(JSON.stringify({ selection: agent.model.current(),
           options: agent.options, cwd: agent.session.header.cwd, preset: agent.session.header.agentPreset, instructions, nativePolicy: await readMainNativePolicy(agent) })).digest('hex')
       },
       safe: async agent => {
         if (agent.status !== 'idle' || agent.inbox.nextStep.length !== 0 || agent.inbox.nextTurn.length !== 0 || (this.targetOperations.get(String(agent.id))?.size ?? 0) !== 0) throw new Error('Current main still owns accepted work.')
-        const questions = this.ctx.sessionProjections.stateOf(agent.session, 'userQuestions')
-        if ((questions?.questions.active.length ?? 0) > 0) throw new Error('Current main still owns an unanswered native user question.')
+        const questions = this.ctx.sessionProjections.snapshot(agent.session, ['userQuestions']).values.userQuestions
+        if ((questions?.active.length ?? 0) > 0) throw new Error('Current main still owns an unanswered native user question.')
         return this.composition.ports.control.captureSettled(agent.id)
       },
       ensureManager: projectId => this.ensureSessionManager(projectId),
@@ -1159,7 +1159,7 @@ export class ProjectsRuntime implements ProjectToolRuntime {
     if (membership === undefined || (membership.session.role !== 'main' && membership.session.role !== 'execution')) {
       throw projectToolError(`${toolName} is available only in a Project session`, 'PROJECT_TOOL_SESSION_REQUIRED')
     }
-    const boundary = this.ctx.sessionProjections.stateOf(agent.session, 'turnBoundary')
+    const boundary = this.ctx.agents.turnBoundaryOf(agent.session)
     if (boundary === undefined || boundary.openTurnStartSeq === null) {
       throw projectToolError(`${toolName} requires an open Project turn`, 'PROJECT_TOOL_TURN_REQUIRED')
     }
@@ -1184,7 +1184,7 @@ export class ProjectsRuntime implements ProjectToolRuntime {
     snapshot: ProjectSnapshot | undefined,
     claimed: readonly ProjectInvocationInput[] = [],
   ): ProjectInvocationInput[] {
-    const boundary = this.ctx.sessionProjections.stateOf(agent.session, 'turnBoundary')
+    const boundary = this.ctx.agents.turnBoundaryOf(agent.session)
     if (snapshot === undefined || boundary?.openTurnStartSeq === null || boundary?.openTurnStartSeq === undefined) return []
     const recorded = agent.session.snapshotEvents(SessionLogOffset(boundary.openTurnStartSeq + 1)).flatMap<ProjectInvocationInput>(event => {
       if (event.type !== 'user/message') return []
@@ -1209,7 +1209,7 @@ export class ProjectsRuntime implements ProjectToolRuntime {
     }
     if (source.kind !== 'user' && source.kind !== 'project-delivery' && source.kind !== 'project-schedule') return undefined
     if (source.kind === 'user') {
-      const timing = userInputTiming(this.ctx.sessionProjections.stateOf(agent.session, 'projects/user-input-timing'), String(message.id))
+      const timing = userInputTiming(this.composition.ports.inputTiming.stateOf(agent.session), String(message.id))
       return { producer: 'user', source: messageRef, provenance: [], ...(timing === undefined ? {} : { timing }) }
     }
     if (source.kind === 'project-schedule') {
@@ -1409,26 +1409,25 @@ export class ProjectsRuntime implements ProjectToolRuntime {
       }
     })
     disposers.push(disposeUsage)
-    if (membership.session.role === 'session-manager') {
+    if (membership.session.role === 'session-manager' || membership.session.role === 'memory') {
+      const route = membership.session.role === 'memory' ? this.options.memoryModel : this.options.sessionManagerModel
+      if (!route?.provider || !route.model) throw new Error('后台模型route尚未明确配置。')
+      // 后台配置在step准备前成为Agent选择，冷恢复也不沿用工作会话的选择。
+      agent.model.select({ provider: route.provider, model: route.model,
+        ...(route.reasoningEffort === undefined ? {} : { reasoningEffort: route.reasoningEffort }) })
       agent.ctx.on('agent/request', async (_payload, next) => {
-        const { reasoningEffort: _effort, maxTokens: _limit, ...config } = await next()
-        const route = this.options.sessionManagerModel
-        if (!route?.provider || !route.model) throw new Error('会话管理Bot route尚未明确配置。')
-        return { ...config, ...route, provider: route.provider, model: route.model }
+        const { maxTokens: _limit, ...config } = await next()
+        if (config.provider !== route.provider || config.model !== route.model || config.reasoningEffort !== route.reasoningEffort) {
+          throw new Error('后台请求与其已固定的模型选择不一致。')
+        }
+        return { ...config, ...(route.maxTokens === undefined ? {} : { maxTokens: route.maxTokens }) }
       })
+    }
+    if (membership.session.role === 'session-manager') {
       agent.ctx.effect(() => this.sessionManager.install(agent, membership), 'projects.session-manager')
       return
     }
     if (membership.session.role === 'memory') {
-      // 内部生命周期可能冷恢复root；实际调用仍固定为显式Bot route，而非工作默认选择。
-      agent.ctx.on('agent/request', async (_payload, next) => {
-        const { reasoningEffort: _oldEffort, maxTokens: _oldLimit, ...config } = await next()
-        const route = this.options.memoryModel
-        if (!route?.provider || !route.model) throw new Error('共享记忆后台模型route尚未明确配置。')
-        return { ...config, provider: route.provider, model: route.model,
-          ...(route.reasoningEffort === undefined ? {} : { reasoningEffort: route.reasoningEffort }),
-          ...(route.maxTokens === undefined ? {} : { maxTokens: route.maxTokens }) }
-      })
       try { agent.ctx.effect(() => this.memoryRuntime.installBot(agent, membership), 'projects.memory-bot') }
       catch (error) { disposeUsage(); this.installedScopes.delete(agent); throw error }
       return
@@ -1436,7 +1435,7 @@ export class ProjectsRuntime implements ProjectToolRuntime {
     try {
       const workRole = membership.session.role
       // Initialize native replay once at installation, not while constructing each request's finite source window.
-      this.ctx.sessionProjections.stateOf(agent.session, 'projects/user-input-timing')
+      this.composition.ports.inputTiming.stateOf(agent.session)
       let deferredInstructionInitialization = this.lifecycle.isCloseOnly(String(agent.id))
       // 冷关闭只安装停止责任；恢复后复用此scope时，初始化延到首次真实请求。
       if (!prepared && !deferredInstructionInitialization) {

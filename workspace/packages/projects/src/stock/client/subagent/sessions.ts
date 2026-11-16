@@ -44,7 +44,6 @@ export class ProjectSubagentSessions implements ISessions {
   private readonly pending = new Set<Promise<void>>()
   private readonly control: ReturnType<typeof createSessionControlStream> | undefined
   private readonly stops: (() => void)[] = []
-  private parentAvailable: boolean | undefined
   private disposed = false
   constructor(readonly ctx: Context, readonly remote: ProjectRemoteShim, readonly capture: ProjectSubagentCapture, cwd?: string) {
     const id = capture.address.childSessionId
@@ -62,9 +61,6 @@ export class ProjectSubagentSessions implements ISessions {
         this.list.set({ ...current, byId: { ...current.byId, [id]: { ...row, running } } })
       }), remote.$on('api-session/error', (changed, message) => {
         if (changed === id) this.record?.native.handleAgentError(message)
-      }), remote.subscribeCatalog(items => {
-        this.parentAvailable = items.some(item => item.sessionId === capture.address.parentSessionId && item.agentAvailable)
-        this.record?.native.handleSubagentParentAvailable(this.parentAvailable)
       }))
       this.control = createSessionControlStream(remote, { accept: frame => {
         const projections = this.record?.native.projections
@@ -72,7 +68,7 @@ export class ProjectSubagentSessions implements ISessions {
         if (frame.type === 'baseline') {
           const baseline = frame.value.projections[id]
           if (baseline !== undefined) projections.seed({ ...baseline, asOfSeq: baseline.asOfSeq === -1 ? -1 : SessionSeq(baseline.asOfSeq) })
-        } else if (frame.sessionId === id) projections.apply(frame.key, frame.value, SessionSeq(frame.seq))
+        } else if (frame.sessionId === id) { for (const change of frame.changes) projections.apply(change.key, change.val, SessionSeq(frame.seq)) }
       }, failed: error => this.controlError.set(String(error)) })
     }
   }
@@ -87,7 +83,6 @@ export class ProjectSubagentSessions implements ISessions {
       const scope = createScope(this.ctx, id)
       const native = this.capture.readOnly ? new ProjectReadSession(id, this.remote, { address: this.capture.address })
         : new FixedChildSession(id, this.remote, this.capture)
-      if (this.parentAvailable !== undefined) native.handleSubagentParentAvailable(this.parentAvailable)
       native.bindScope(scope.ctx); native.handleBlank(false)
       const binding: SessionBinding = { sessionId: id, session: native, ctx: scope.ctx, eventSource: native.eventSource }
       const stopProjections = native.projections.subscribeAny(() => {

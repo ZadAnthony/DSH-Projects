@@ -15,7 +15,7 @@ import { credentialStoreFrom, authContextFrom } from './pi/auth.ts'
 import type { Api, Model } from './provider-sdk/index.js'
 
 export interface ProjectsBoundAdapter { readonly adapter: LlmAdapter; readonly routes: readonly string[] }
-export function createProjectsBoundAdapter(ctx: Context, snapshot: ProjectsProviderSnapshot): ProjectsBoundAdapter {
+export function createProjectsBoundAdapter(ctx: Context, snapshot: ProjectsProviderSnapshot, isCurrent: () => boolean): ProjectsBoundAdapter {
   const configuration = structuredClone(snapshot.configuration)
   const imageAccess = (attachments: Parameters<typeof resolveImageAttachmentAccess>[0], ref: Parameters<typeof resolveImageAttachmentAccess>[2]) =>
     resolveImageAttachmentAccess(attachments, path => ctx.get('fs')?.processPathFromHostPath(path), ref)
@@ -37,7 +37,7 @@ export function createProjectsBoundAdapter(ctx: Context, snapshot: ProjectsProvi
     })
     return { adapter, routes: [...profiles.keys()] }
   }
-  const connection = createDeepSeekConnectionHooks(ctx, snapshot)
+  const connection = createDeepSeekConnectionHooks(ctx, snapshot, isCurrent)
   const persistence = ctx.get('sessionPersistence')
   if (persistence === undefined || !('dataRoot' in persistence) || typeof persistence.dataRoot !== 'string') throw new Error('PROJECT_MODEL_STORAGE_UNAVAILABLE')
   const files = new DeepSeekFileStore({ index: new DeepSeekUploadIndex(join(persistence.dataRoot, 'model-files', 'deepseek-files-v3.json')) })

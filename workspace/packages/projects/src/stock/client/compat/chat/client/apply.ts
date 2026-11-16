@@ -208,6 +208,7 @@ export function apply(ctx: Context, projectOptions: InstallProjectChatOptions): 
           hooks: { presentation },
           projectFocus: createProjectChatFocusRegistration(ctx, binding, () => chat.getSnapshot(), projectOptions),
           projectFileImageRevision: projectOptions.fileReader.imageRevision,
+          projectFileDrag: ctx.fileDrag.actions,
           projectResolveFileImage: path => {
             const exact = projectOptions.fileReader.options.resolveBinding(sessionId)
             return exact === undefined ? projectOptions.fileReader.unavailableImageSource()

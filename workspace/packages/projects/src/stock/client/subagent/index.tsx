@@ -5,6 +5,7 @@ import { apply as applyUiSession } from '@deepseek-ai/dsh-client-ui-session/clie
 import { apply as applyConversation, UiConversation } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import { apply as applyTools } from '@deepseek-ai/dsh-client-ui-tool/client'
 import { apply as applyAttachments } from '@deepseek-ai/dsh-client-ui-attachment/client'
+import { apply as applyFileDrag } from '@deepseek-ai/dsh-client-ui-file-drag/client'
 import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
 import { acquireProjectsLocale } from '../../../client/ui/copy.ts'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
@@ -87,7 +88,7 @@ function FixedChatViews(props: ConversationViewsProps) { return <>{props.renderS
 function ContinuableBody({ useSession, useConversation, renderFactorySlot }: PropsRuntime<'projects.subagent.live'> & PropsRenderFactories) {
   const session = useSession(value => value), conversation = useConversation(value => value)
   const active = conversation.activeTargets.size > 0 || (!session.blank && !session.awaitingFirstTurn) || session.running
-  const settling = session.openState === 'loading' || session.subagent?.parentAvailable === undefined
+  const settling = session.openState === 'loading'
   return renderFactorySlot('conversation.content', { variant: 'embedded', phase: settling ? 'settling' : active ? 'active' : 'hero', hero: !active }, {
     slots: { views: FixedChatViews },
   })
@@ -130,7 +131,13 @@ export class ProjectSubagentDomain {
     ctx.provide('uiWorkspace', { openSession: (target: SessionTarget) => { void (async () => { await options.onOpenSession(target) })().catch(error => this.failure.set(String(error))) },
       openWorkspace: async () => { throw new Error('Open the Project workspace from its project settings') } })
     applyRenderer(ctx)
-    installProjectNativeAccess(ctx)
+    installProjectNativeAccess(ctx, this.capture.readOnly ? undefined : {
+      sessionId: this.capture.address.childSessionId,
+      writable: {
+        getSnapshot: () => this.capture.writable,
+        subscribe: listener => ctx.sessions.list.subscribe(listener),
+      },
+    })
     // Native ConversationContent consumes this root presentation even in embedded mode.
     // It does not grant child membership or expose a workspace mutation owner.
     ctx.slots.provideRoot({ hooks: { workspaces: createSnapshotStore<WorkspaceSnapshot>({ items: [], archivedSessionIds: [],
@@ -141,6 +148,7 @@ export class ProjectSubagentDomain {
     if (this.capture.readOnly) locale.register('conversation', { en: conversationEn, zh: conversationZh })
     if (options.language !== undefined) locale.setLocale(options.language)
     ctx.provide('locale', locale); ctx.slots.installLocale(locale)
+    applyFileDrag(ctx)
     this.sessions = new ProjectSubagentSessions(ctx, this.remote, this.capture, options.detail.project.workspace?.path)
     this.remote.attachSessions(this.sessions)
     ctx.effect(() => () => this.sessions.dispose(), 'Projects fixed native child')

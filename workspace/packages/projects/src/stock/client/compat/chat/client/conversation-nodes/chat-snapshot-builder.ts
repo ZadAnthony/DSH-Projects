@@ -106,6 +106,7 @@ class MutableChatNodeStore implements ChatNodeStore {
   private readonly byKey = new Map<string, ChatConversationViewNode>()
   private readonly turnProcesses = new ChatTurnProcessProjector()
   private readonly sources = new Map<string, MutableChatSource<ChatConversationViewNode | undefined>>()
+  private readonly bottomSources = new Map<string, MutableChatSource<boolean>>()
   private readonly processSources = new Map<string, MutableChatSource<ChatTurnProcessPresentation | undefined>>()
   private readonly dirtyKeys = new Set<string>()
   private readonly dirtyProcessKeys = new Set<string>()
@@ -122,6 +123,13 @@ class MutableChatNodeStore implements ChatNodeStore {
     return cachedSource(this.sources, key, () => new MutableChatSource(
       () => this.get(key),
       `[ui-chat] node source ${key}`,
+    ))
+  }
+
+  // 本产品的现有节点未声明exchange边界，按公共合同属于同一已载入exchange。
+  bottomSource(key: string): ObservableSnapshot<boolean> {
+    return cachedSource(this.bottomSources, key, () => new MutableChatSource(
+      () => this.get(key)?.visibility === 'visible', `[ui-chat] node bottom source ${key}`,
     ))
   }
 
@@ -223,7 +231,7 @@ class MutableChatNodeStore implements ChatNodeStore {
     this.dirtyKeys.clear()
     this.dirtyProcessKeys.clear()
     this.dirtyTurnKinds.clear()
-    for (const key of dirty) this.sources.get(key)?.publish()
+    for (const key of dirty) { this.sources.get(key)?.publish(); this.bottomSources.get(key)?.publish() }
     for (const key of dirtyProcesses) this.processSources.get(key)?.publish()
     for (const collection of dirtyTurnKinds) collection.publish()
   }

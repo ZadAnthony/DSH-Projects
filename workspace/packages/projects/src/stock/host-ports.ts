@@ -28,6 +28,7 @@ export interface ProjectsModelHostPort {
   prepareCall(config: LlmCallConfig, signal?: AbortSignal, configure?: ConfigureCall): Promise<PreparedLlmCall>
   captureProvider?(provider: string): ProjectsProviderSnapshot | undefined
   subscribe?(listener: () => void): () => void
+  subscribeModelChanges?(listener: (provider: string) => void): () => void
 }
 export interface ProjectsProviderSnapshot {
   readonly family: 'deepseek-api-key' | 'deepseek-account' | 'pi-ai'
@@ -95,7 +96,7 @@ export function createProjectsHostPorts(root: Context): ProjectsHostPorts {
       : entry.options.name === '@deepseek-ai/dsh-llm-deepseek-account' ? 'deepseek-account'
       : entry.options.name === '@deepseek-ai/dsh-llm-pi-ai' ? 'pi-ai' : undefined
     if (family === undefined) return undefined
-    const configuration = plain(entry.fiber!.config) as Record<string, unknown>
+    const configuration = plain(entry.fiber!.effectiveConfig) as Record<string, unknown>
     const catalog = family === 'pi-ai'
       ? capturePiCatalog(entry.parent.tree.ctx.baseUrl!, Object.keys(configuration.providers as Record<string, unknown> ?? {}))
       : undefined
@@ -129,6 +130,7 @@ export function createProjectsHostPorts(root: Context): ProjectsHostPorts {
         // model inventory changes without scheduling a second graph refresh.
         return root.on('llm/adapters-updated', listener, { global: true })
       },
+      subscribeModelChanges: listener => root.on('llm/models-updated', listener, { global: true }),
     },
     // Optional host owners may still be loading at graph creation, or be replaced
     // later. Keep the capability live without creating a second credential store.

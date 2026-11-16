@@ -93,8 +93,8 @@ export async function installProjectNativeCapabilities(ctx: Context, ports: Proj
     if (ctx.get(key) === undefined) ctx.provide(key, ports.remote[owner])
     else if (ctx.get(key) !== ports.remote[owner]) throw new Error(`Projects native namespace belongs to another owner: ${key}`)
   }
-  await installProjectReadOnlyNativePresentations(ctx, { ...ports, session: ports.remote.session, planNavigation })
   if (ports.mode === 'reader') {
+    await installProjectReadOnlyNativePresentations(ctx, { ...ports, session: ports.remote.session, planNavigation })
     if (ports.selectedTools !== undefined) await installProjectNativeToolViews(ctx, ports.selectedTools, ports.mode)
     return { mode: 'reader', shortcuts: undefined, planNavigation, toolViewsInstalled: ports.selectedTools !== undefined,
     currentSessionPickersInstalled: false, presentedFilesInstalled: ports.presentedFiles !== undefined,
@@ -105,6 +105,7 @@ export async function installProjectNativeCapabilities(ctx: Context, ports: Proj
 
   const shortcuts = new ProjectScopedShortcuts(ctx, ports.shortcutSettings)
   ctx.provide('shortcuts', shortcuts)
+  await installProjectReadOnlyNativePresentations(ctx, { ...ports, session: ports.remote.session, planNavigation })
   applyInputTriggers(ctx)
   await awaitNativeService(ctx, InputTriggerService, 'inputTriggers')
   applyCommands(ctx)

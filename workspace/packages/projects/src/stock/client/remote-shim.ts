@@ -19,7 +19,7 @@ export type { ProjectInteractionSessions } from './remote/interactions.ts'
 export type { ProjectInteractionSubmission } from './remote/interactions.ts'
 export interface SessionSubagentsRemote {
   prompt: ClientRemote['subagents']['prompt']
-  interruptByParent: ClientRemote['subagents']['interruptByParent']
+  interruptByUser: ClientRemote['subagents']['interruptByUser']
 }
 export interface SessionRemotes {
   readonly $stream: ClientRemote['$stream']
@@ -57,7 +57,7 @@ export class ProjectRemoteShim implements SessionRemotes, ProjectNativeRemoteCap
   readonly job: ClientRemote['job']
   private readonly listeners: ListenerSets = {
     'api-session/status': new Set(), 'api-session/error': new Set(), 'approval/request': new Set(), 'user-questions/request': new Set(),
-    'commands/change': new Set(), 'agent-preset/selected': new Set(), 'llm/adapters-updated': new Set(),
+    'commands/change': new Set(), 'agent-preset/selected': new Set(), 'llm/adapters-updated': new Set(), 'llm/models-updated': new Set(),
     'settings/document-updated': new Set(), 'credentials/record-updated': new Set(), 'credentials/reference-updated': new Set(),
     'permission-presets/catalog-changed': new Set(),
   }
@@ -112,6 +112,12 @@ export class ProjectRemoteShim implements SessionRemotes, ProjectNativeRemoteCap
       rename: request => this.full().uiRename({ ...structuredClone(request), ...this.capture(request.sessionId, true) }),
       projections: (request, signal) => this.full().uiProjections(request, signal),
       search: (request, signal) => this.full().uiSearch(request, signal),
+      events: async () => missing('events: Projects owns its follow/page history transport'),
+      observeEvent: () => unsupportedProjectClientOperation('observeEvent'),
+      observeProjections: () => unsupportedProjectClientOperation('observeProjections'),
+      observeState: () => unsupportedProjectClientOperation('observeState'),
+      state: async () => missing('state: Projects owns its control stream'),
+      wait: async () => missing('wait: Projects owns its control stream'),
       fork: async () => missing('fork: Projects has no branch target'),
       list: async () => missing('native list: use Projects catalog'),
       create: async () => missing('native create: use Projects create'),
@@ -130,7 +136,9 @@ export class ProjectRemoteShim implements SessionRemotes, ProjectNativeRemoteCap
       answer: (id, callId, answer) => this.full().uiAnswerQuestion({ ...this.capture(id, true), callId, answer: structuredClone(answer) }),
       attachWait: (id, callId, signal) => this.full().uiAttachQuestionWait({ ...this.capture(id, true), callId }, signal),
     }
-    this.fileUpload = { upload: (...args) => this.upload(...args) }
+    this.fileUpload = { upload: (...args) => this.upload(...args),
+      uploadImage: async () => unsupportedProjectClientOperation('uploadImage: Projects sends prompt images inline'),
+    }
     this.permissionPresets = { catalog: () => this.full().uiPermissionCatalog() }
     this.agentPresets = { list: () => this.full().uiAgentPresetList() }
     this.skills = { list: (request, signal) => this.full().uiSkills(request, signal) }
@@ -141,17 +149,27 @@ export class ProjectRemoteShim implements SessionRemotes, ProjectNativeRemoteCap
     }
     this.subagents = {
       prompt: (request, signal) => {
-        const { sessionId: _sessionId, ...access } = this.capture(request.parentSessionId, true)
-        return this.full().uiSubagentPrompt({ ...structuredClone(request), ...access }, signal)
+        const address = this.childAddress(request.childSessionId)
+        const { sessionId: _sessionId, ...access } = this.capture(request.childSessionId, true)
+        return this.full().uiSubagentPrompt({ ...structuredClone(request), parentSessionId: address.parentSessionId, mode: 'continuable', ...access }, signal)
       },
-      interruptByParent: (childSessionId, parentSessionId, mode) => {
-        const { sessionId: _sessionId, ...access } = this.capture(parentSessionId, true)
-        return this.full().uiSubagentInterrupt({ childSessionId, parentSessionId, mode, ...access })
+      interruptByUser: childSessionId => {
+        const address = this.childAddress(childSessionId)
+        const { sessionId: _sessionId, ...access } = this.capture(childSessionId, true)
+        return this.full().uiSubagentInterrupt({ childSessionId, parentSessionId: address.parentSessionId, mode: 'continuable', ...access })
       },
     }
     this.stopHostNotifications = options.hostNotifications?.subscribePluginManagerChanged((...args) => {
       this.hostNotifications.publishPluginManagerChanged(...args)
     })
+  }
+
+  private childAddress(id: SessionId) {
+    const address = this.sessions?.binding(id)?.session.getSnapshot().subagent?.address
+    if (address === undefined || address.childSessionId !== id || address.mode !== 'continuable') {
+      throw new Error('PROJECT_SUBAGENT_ADDRESS_CHANGED: current continuable child binding required')
+    }
+    return address
   }
 
   private full(): FullProjectClientRemotePort {

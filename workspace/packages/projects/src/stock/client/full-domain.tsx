@@ -1,12 +1,13 @@
 /** Full Projects product, composed solely inside its independent native Client domain. */
 import { Context } from '@deepseek-ai/cordis'
-import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ComponentType, type ReactNode } from 'react'
 import type { ConnectionHandle } from '@deepseek-ai/dsh-client-connection/client'
 import type { RemoteHostFacts } from '@deepseek-ai/dsh-api-gateway/client'
 import { apply as applyRenderer } from '@deepseek-ai/dsh-client-ui-renderer/client'
 import { apply as applyUiSession } from '@deepseek-ai/dsh-client-ui-session/client'
 import { apply as applyTools } from '@deepseek-ai/dsh-client-ui-tool/client'
 import { apply as applyAttachments } from '@deepseek-ai/dsh-client-ui-attachment/client'
+import { apply as applyFileDrag } from '@deepseek-ai/dsh-client-ui-file-drag/client'
 import { conversationPhase } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
 import type { SessionBinding, SessionReference } from '@deepseek-ai/dsh-api-session-controller/client'
@@ -97,6 +98,7 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
     'projects.native.conversation': { kind: 'single'; scope: 'session'; owner: { readonly focus?: Focus; readonly visible?: boolean; readonly identity?: ProjectConversationIdentity } }
     'projects.native.model': { kind: 'single'; scope: 'session' }
     'projects.native.session.actions': { kind: 'list'; scope: 'session' }
+    'projects.native.session.actions.subagent.footer': { kind: 'list'; scope: 'session' }
     'projects.native.preset': { kind: 'single'; scope: 'session-maybe' }
   }
 }
@@ -106,14 +108,28 @@ function installProjectNativePaneSeats(ctx: Context): void {
   for (const [source, target, ids] of [
     ['conversation.session.header.actions', 'projects.native.session.actions', new Set(['agent-preset', 'subagent-catalog', 'job-list'])],
     ['conversation.hero.agentPreset', 'projects.native.preset', undefined],
+    ['conversation.session.header.actions.subagent.footer', 'projects.native.session.actions.subagent.footer', undefined],
   ] as const) ctx.slots.inject(target, () => {
     const installed = new Map<StoredEntry, () => void>()
     const update = () => {
       const entries = ctx.slots.entriesOfSlot(source).filter(entry => ids === undefined || entry.options.id !== undefined && ids.has(entry.options.id))
       for (const [entry, close] of installed) if (!entries.includes(entry)) { close(); installed.delete(entry) }
-      for (const entry of entries) if (!installed.has(entry)) installed.set(entry, ctx.slots.register({
-        ...entry.options, name: target, inject: entry.inject, locale: entry.locale, store: entry.store, select: entry.select,
-      } as never, entry.component as never))
+      for (const entry of entries) if (!installed.has(entry)) {
+        const hasCatalogFooter = entry.children?.['conversation.session.header.actions.subagent.footer'] !== undefined
+        // 原声明仍由宿主叶子持有；私有镜像只声明自己的页脚，并保留真实渲染与卸载通路。
+        const Native = entry.component as ComponentType<Record<string, unknown>>
+        const component = hasCatalogFooter
+          ? ({ renderSlot, ...props }: Record<string, unknown> & PropsRenderSlots<'projects.native.session.actions.subagent.footer'>) => <Native {...props}
+            renderSlot={((key, owner, options) => {
+              if (key !== 'conversation.session.header.actions.subagent.footer') throw new Error(`Unexpected native catalog child ${key}`)
+              return renderSlot('projects.native.session.actions.subagent.footer', owner, options)
+            }) satisfies PropsRenderSlots<'conversation.session.header.actions.subagent.footer'>['renderSlot']} />
+          : entry.component
+        installed.set(entry, ctx.slots.register({
+          ...entry.options, name: target, inject: entry.inject, locale: entry.locale, store: entry.store, select: entry.select,
+          ...(hasCatalogFooter ? { children: { 'projects.native.session.actions.subagent.footer': { kind: 'list', scope: 'session' } } } : {}),
+        } as never, component as never))
+      }
     }
     update()
     const stop = ctx.slots.subscribe(source, update)
@@ -504,6 +520,7 @@ export class FullProjectClientDomain {
     ctx.slots.provideRoot({ hooks: { workspaces: this.workspaces } })
     const locale = new LocaleRuntime(ctx); locale.register('common', { en, zh }); if (options.language !== undefined) locale.setLocale(options.language)
     ctx.provide('locale', locale); ctx.slots.installLocale(locale)
+    applyFileDrag(ctx)
     this.sessions = new ProjectSessions(ctx, this.remote, { onBinding: binding => this.remote.retainInteractions(binding.sessionId),
       onCarrierInvalidated: (address, permanent) => { if (permanent) this.drafts?.invalidateLogical(address.projectId, address.logicalSessionId); this.fileReader?.invalidate() } })
     this.remote.attachSessions(this.sessions)

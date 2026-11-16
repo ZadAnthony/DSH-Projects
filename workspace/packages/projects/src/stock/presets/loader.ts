@@ -42,7 +42,7 @@ export class ProjectsSnapshotInclude extends EntryTree {
     await this.root.update(materializeSnapshotTree(this.config.tree!, this.ctx.loader as ProjectsPresetLoader))
   }
 
-  override write(): void {}
+  override commit(): void {}
 }
 
 /** A distinct Group plugin owned and registered by this graph's Loader. */

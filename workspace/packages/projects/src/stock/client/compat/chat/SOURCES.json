@@ -13,7 +13,7 @@
       "source": "packages/client/ui-chat/src/client/apply.ts",
       "local": "client/apply.ts",
       "sha256": "643cee94feabe9a71ecf13e4bb86fb4bee6b1e9603336dc04828654bf9bf1972",
-      "localSha256": "53d95df73d121c51385aa1ace3131fc951fcdd2572ba7978c6949e815a23d1db",
+      "localSha256": "93de074236efe6bc0ea08845073c4cbfa35d2b821d25f77630e6d014208eb225",
       "modified": true
     },
     {
@@ -41,7 +41,7 @@
       "source": "packages/client/ui-chat/src/client/chat/AssistantNodeView.tsx",
       "local": "client/chat/AssistantNodeView.tsx",
       "sha256": "239c8fe1305ede17d3786bfdd61e7e52f3cab30ae548befe172867c52deef388",
-      "localSha256": "323ec1ad99b320c59b75cf65330957af1b6c78cc3b02e3d02771f8e63180c042",
+      "localSha256": "4a8d087409e27d96a0f93b10544d106736ca8df318fdaf98d8f00c6b46e6906c",
       "modified": true
     },
     {
@@ -55,8 +55,8 @@
       "source": "packages/client/ui-chat/src/client/chat/ChatGroupSeat.tsx",
       "local": "client/chat/ChatGroupSeat.tsx",
       "sha256": "261ba4fecdaad8922462faa9b0aef01b56788d78b2e08f0b2fb768df405ef18c",
-      "localSha256": "261ba4fecdaad8922462faa9b0aef01b56788d78b2e08f0b2fb768df405ef18c",
-      "modified": false
+      "localSha256": "943e14a5ca657085f40e8c09318bf2c99d6ce150477ed7b3f6d797fd1b98e425",
+      "modified": true
     },
     {
       "source": "packages/client/ui-chat/src/client/chat/ChatNodeSeat.tsx",
@@ -76,7 +76,7 @@
       "source": "packages/client/ui-chat/src/client/chat/ChatView.tsx",
       "local": "client/chat/ChatView.tsx",
       "sha256": "b04d33feef8145c61b21000dcf037da244d232b4827866e56679ed360db641b7",
-      "localSha256": "e034e6f57ee4a89638a5f5297c81aded3b1276ed4e346d5531914e883ec38389",
+      "localSha256": "07ca72ec0ec4589a2600601309c0ee124449f18086708dba8bd9413d9e03c960",
       "modified": true
     },
     {
@@ -216,8 +216,8 @@
       "source": "packages/client/ui-chat/src/client/chat/StatsPills.tsx",
       "local": "client/chat/StatsPills.tsx",
       "sha256": "7c74b7b3538e297d6f3352508f4d17a424c962dcd1bc61d13f70093e0b02667c",
-      "localSha256": "7c74b7b3538e297d6f3352508f4d17a424c962dcd1bc61d13f70093e0b02667c",
-      "modified": false
+      "localSha256": "041a99f333691f451552d4757f1a0f9cb9ab0458375ecaafea7ce76f024fbfc6",
+      "modified": true
     },
     {
       "source": "packages/client/ui-chat/src/client/chat/SystemPromptRow.tsx",
@@ -293,8 +293,8 @@
       "source": "packages/client/ui-chat/src/client/chat/TurnUsagePanel.tsx",
       "local": "client/chat/TurnUsagePanel.tsx",
       "sha256": "50c74e7cafb5d2a3373e728f31c37a8e07271fdc888369e818551cd458cc9b1e",
-      "localSha256": "50c74e7cafb5d2a3373e728f31c37a8e07271fdc888369e818551cd458cc9b1e",
-      "modified": false
+      "localSha256": "bca5ecb19ed756063f56a279fdffad035af816f91a4da829666343a144b37608",
+      "modified": true
     },
     {
       "source": "packages/client/ui-chat/src/client/chat/accessibility.module.css",
@@ -342,15 +342,15 @@
       "source": "packages/client/ui-chat/src/client/chat/stat-dialog.module.css",
       "local": "client/chat/stat-dialog.module.css",
       "sha256": "5dd6d59fceff90b5f8ec4066f14982a161cb492532eabe538823665f9315715d",
-      "localSha256": "5dd6d59fceff90b5f8ec4066f14982a161cb492532eabe538823665f9315715d",
-      "modified": false
+      "localSha256": "fb20778c220f25b778c5491e5319ccbc0e168013edd18ae922098b2d0a3831bb",
+      "modified": true
     },
     {
       "source": "packages/client/ui-chat/src/client/chat/stat-dialog.ts",
       "local": "client/chat/stat-dialog.ts",
       "sha256": "b2ed41cce24be8522dea0508ebdab109da2f1fe98f69a830a52f886304b66ada",
-      "localSha256": "b2ed41cce24be8522dea0508ebdab109da2f1fe98f69a830a52f886304b66ada",
-      "modified": false
+      "localSha256": "60ee7ecbd7de453ece141a7ae458a0c6697a797f84f051ef8c517f6c27e5f418",
+      "modified": true
     },
     {
       "source": "packages/client/ui-chat/src/client/chat/step-process.ts",
@@ -475,21 +475,21 @@
       "source": "packages/client/ui-chat/src/client/contract/process-groups.ts",
       "local": "client/contract/process-groups.ts",
       "sha256": "c918a12f1e719d3311b95b6a3b06f2c6d26c2cf8fca137dd2cae5539c20bb806",
-      "localSha256": "c918a12f1e719d3311b95b6a3b06f2c6d26c2cf8fca137dd2cae5539c20bb806",
-      "modified": false
+      "localSha256": "1f200c6fbc149cd57c9d62352612048d1b626aa7d53ffddaf1c58936d067a253",
+      "modified": true
     },
     {
       "source": "packages/client/ui-chat/src/client/contract/slots.ts",
       "local": "client/contract/slots.ts",
       "sha256": "99071c39ccc88d63505acf4cce7b2cf2a8b4cf5a9856b473e3ef11f8c7c52a7e",
-      "localSha256": "ac54cab8a7f17d03013e54dde54a5d18de54ed94995a8a82b5f9d830944f0792",
+      "localSha256": "6355cc817506746b326f412bc34ddcbb5d8581577ecdc5ab339e6f3b3a89bd96",
       "modified": true
     },
     {
       "source": "packages/client/ui-chat/src/client/contract/snapshot.ts",
       "local": "client/contract/snapshot.ts",
       "sha256": "8392f513d36a0ce21d6b1e6e2c7f02b628bba8e84fd5c6d8e41146f8175fb10a",
-      "localSha256": "bd8166e781e3cfdad00ad15c777d71b35d4a3c48c7044c741c904e47b5843755",
+      "localSha256": "39604bdd67779b776a816eb16babcc522183a892fb50a376a11180dfbf32dbb1",
       "modified": true
     },
     {
@@ -524,8 +524,8 @@
       "source": "packages/client/ui-chat/src/client/conversation-nodes/chat-snapshot-builder.ts",
       "local": "client/conversation-nodes/chat-snapshot-builder.ts",
       "sha256": "086f72d1b0b5bb1dceafc8520cb3b976d4de697dd93445585e88a4bdbfd3f464",
-      "localSha256": "086f72d1b0b5bb1dceafc8520cb3b976d4de697dd93445585e88a4bdbfd3f464",
-      "modified": false
+      "localSha256": "de6024320c374bfbf4e514053ec835ce7d3a00f7cca8e33cb7ee523e0a5daa69",
+      "modified": true
     },
     {
       "source": "packages/client/ui-chat/src/client/conversation-nodes/command.ts",
@@ -573,15 +573,15 @@
       "source": "packages/client/ui-chat/src/client/conversation-nodes/message.ts",
       "local": "client/conversation-nodes/message.ts",
       "sha256": "0ce690fcec8fb7776805750c1fbe2801861d714eadeaa6b62a3344d14095b621",
-      "localSha256": "83bfe15ba493a93741aa7ecc1c6ab14941355d0d696482410f1a1f85bcf8b42c",
+      "localSha256": "df8b4a5c8b1f9b9ea865e23a3ffdc104ebf8d1d569d828c7c1c4e2d0d8d2e25e",
       "modified": true
     },
     {
       "source": "packages/client/ui-chat/src/client/conversation-nodes/process-activity.ts",
       "local": "client/conversation-nodes/process-activity.ts",
       "sha256": "490b28f3fa34aaeee6f28af8e0b389b2646e3bb30f6f49b066c190b5eb98bb93",
-      "localSha256": "490b28f3fa34aaeee6f28af8e0b389b2646e3bb30f6f49b066c190b5eb98bb93",
-      "modified": false
+      "localSha256": "1119e044bf8e0ca4db683978cc3c0db9df5ee6d934488d53f7dc2cdfe4092d4c",
+      "modified": true
     },
     {
       "source": "packages/client/ui-chat/src/client/conversation-nodes/process-groups.ts",
@@ -615,8 +615,8 @@
       "source": "packages/client/ui-chat/src/client/conversation-nodes/tool.ts",
       "local": "client/conversation-nodes/tool.ts",
       "sha256": "bbb8b1939b0726af44fe1d27e6e97742a357233f149bb4baec88ff07a217661b",
-      "localSha256": "bbb8b1939b0726af44fe1d27e6e97742a357233f149bb4baec88ff07a217661b",
-      "modified": false,
+      "localSha256": "c84a92259d7a9d34c43e1ab36724ecc4f6aed8eec41a668eaed998b1cf19e893",
+      "modified": true,
       "commit": "1f81c047fc48fa190a683e469daa699857e9afe8"
     },
     {
@@ -644,15 +644,15 @@
       "source": "packages/client/ui-chat/src/client/conversation-nodes/turn-process-presentation.ts",
       "local": "client/conversation-nodes/turn-process-presentation.ts",
       "sha256": "ebd46e6345ba0998315b8810c2faaee47b3c46290e227a999e7cd69a1010d883",
-      "localSha256": "ebd46e6345ba0998315b8810c2faaee47b3c46290e227a999e7cd69a1010d883",
-      "modified": false
+      "localSha256": "97ac2c2a5682db42bcf553c6dad083c369506b444cfb997fc6159827d185811f",
+      "modified": true
     },
     {
       "source": "packages/client/ui-chat/src/client/conversation-nodes/turn-process.ts",
       "local": "client/conversation-nodes/turn-process.ts",
       "sha256": "abe53ea43138a6b6850ab51ac975a9ec63670c16bce60c6e6f081d261fdd1983",
-      "localSha256": "abe53ea43138a6b6850ab51ac975a9ec63670c16bce60c6e6f081d261fdd1983",
-      "modified": false
+      "localSha256": "db7d43ab0d25e30de57774df3d80b4ebd716b006dfa792f902a6be12f6e115c7",
+      "modified": true
     },
     {
       "source": "packages/client/ui-chat/src/client/conversation-nodes/turn-tail.ts",
@@ -665,7 +665,7 @@
       "source": "packages/client/ui-chat/src/client/locale.ts",
       "local": "client/locale.ts",
       "sha256": "ab75e50ba99fedcf15230eb7746736afc9da81af681e3536c3f7c2143a47ad7c",
-      "localSha256": "1f2a3b58ea970decabeaaeb22306676f2bb69b5ebb393f5390dbc48c397de243",
+      "localSha256": "992fcb1e2af1471c13db9823579dae386d7891b536b822c915a7295a3856cc16",
       "modified": true,
       "commit": "1f81c047fc48fa190a683e469daa699857e9afe8"
     },
@@ -787,8 +787,8 @@
     }
   },
   "compatibilityTarget": {
-    "version": "0.2.1-rc.3",
-    "commit": "1f81c047fc48fa190a683e469daa699857e9afe8",
-    "provenance": "Default commit remains the original copied source; individual migrated files override commit. localSha256 records current adaptations."
+    "version": "0.2.2-rc.3",
+    "commit": "38a6a5c965aa99ab525161efb7cc5cf1fe62fced",
+    "provenance": "Only current host is targeted. Original copied-source commit and per-file overrides retain their historical provenance."
   }
 }

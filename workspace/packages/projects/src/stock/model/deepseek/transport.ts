@@ -61,7 +61,7 @@ export function providerError(raw: unknown, status: number | undefined, headers?
   const retry = headers?.get('retry-after')
   const delay = retry == null ? NaN : /^\d+(?:\.\d+)?$/u.test(retry) ? Number(retry) * 1000 : Date.parse(retry) - Date.now()
   const id = headers?.get('request-id') ?? headers?.get('x-request-id') ?? headers?.get('x-deepseek-request-id')
-  return new LlmError(message, code, {
+  return LlmError.fromFailure({ message, code,
     ...status === undefined ? {} : { status },
     ...id ? { requestId: ProviderRequestId(id) } : {},
     ...Number.isFinite(delay) && delay > 0 ? { providerRetryAfterMs: delay } : {},

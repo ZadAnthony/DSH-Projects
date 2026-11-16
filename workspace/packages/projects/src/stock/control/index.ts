@@ -8,6 +8,7 @@ import { foldSubagentDescriptor } from '@deepseek-ai/dsh-subagent'
 import type { UserMessage, MessageId } from '@deepseek-ai/dsh-llm'
 import { SessionId, SessionLogOffset, SessionPreparation, type Session, type SessionHeader, type SessionEvent } from '@deepseek-ai/dsh-session'
 import type { ProjectAgentFactory, ProjectFactoryLifecycle } from '../agent/factory.ts'
+import { withProjectAgentParent } from '../agent/factory.ts'
 import { ProjectWriterLock } from '../persistence/files.ts'
 import type { ProjectSessionPersistence, ProjectRunTransform } from '../persistence/index.ts'
 import { transformProjectDispatchForRun } from '../request/records.ts'
@@ -89,10 +90,10 @@ export class ProjectOwnedControl implements ProjectControlPort, ProjectFactoryLi
   attachFactory(factory: ProjectAgentFactory): () => void { return factory.setLifecycle(this) }
   private bump(id: SessionId): void { this.generations.set(id, (this.generations.get(id) ?? 0) + 1) }
   private isSelected(agent: Agent, ids: ReadonlySet<SessionId>): boolean {
-    return ids.has(agent.id) || [...ids].some(id => { const root = this.ctx.agents.get(id); return root !== undefined && this.ctx.agents.isOwnedBy(agent.id, root) })
+    return ids.has(agent.id) || [...ids].some(id => { const root = this.ctx.agents.get(id); return root !== undefined && this.factory().owns(agent, root) })
   }
   private held(id: SessionId, agent?: Agent): boolean {
-    return this.cuts.has(id) || agent !== undefined && [...this.cuts.keys()].some(root => { const parent = this.ctx.agents.get(root); return parent !== undefined && this.ctx.agents.isOwnedBy(agent.id, parent) })
+    return this.cuts.has(id) || agent !== undefined && [...this.cuts.keys()].some(root => { const parent = this.ctx.agents.get(root); return parent !== undefined && this.factory().owns(agent, parent) })
   }
   private acquire(ids: readonly SessionId[]): () => void {
     const token = {}
@@ -100,14 +101,14 @@ export class ProjectOwnedControl implements ProjectControlPort, ProjectFactoryLi
     return () => { for (const id of ids) { const set = this.cuts.get(id); set?.delete(token); if (set?.size === 0) this.cuts.delete(id); this.bump(id) } }
   }
   async createPreparedAgent(request: { projectId: string; sessionId: string; attemptId: string; options: CreateAgentOptions }): Promise<AgentHandle> {
-    if (this.closing || request.options.parentAgent !== undefined || this.held(request.options.sessionId)) throw new Error('Projects prepared root creation is closing or has an invalid parent')
+    if (this.closing || this.held(request.options.sessionId)) throw new Error('Projects prepared root creation is closing')
     const ownership = await this.config.store?.resolveHostOwnership(request.options.sessionId)
     if (ownership?.kind !== 'preparation' || ownership.project.id !== request.projectId || ownership.session.id !== request.sessionId
       || ownership.preparation.attemptId !== request.attemptId || ownership.preparation.state !== 'unpublished' || ownership.preparation.toHeader !== undefined
       || ownership.session.role !== 'main' || ownership.session.hostSessionId !== ownership.preparation.fromHeader.id
       || ownership.project.archived || ownership.session.archived || ownership.preparation.sourceLifecycle !== undefined) throw new Error('Projects prepared creation requires the exact current Store reservation')
     const permit = { kind: 'prepared-root' as const, id: request.options.sessionId, active: true, projectId: request.projectId, sessionId: request.sessionId, attemptId: request.attemptId }
-    try { return await this.creationPermit.run(permit, () => this.ctx.agents.create(request.options)) }
+    try { return await this.creationPermit.run(permit, () => withProjectAgentParent(undefined, () => this.ctx.agents.create(request.options))) }
     finally { permit.active = false }
   }
   async validateCreation(id: SessionId, header: SessionHeader, parent?: Agent, kind: 'create' | 'resume' = 'create'): Promise<void> {
@@ -248,9 +249,9 @@ export class ProjectOwnedControl implements ProjectControlPort, ProjectFactoryLi
     try {
       preparation = SessionPreparation.create(this.ctx.sessions.prepare(id, { seed: [...saved.events], meta: writer.header, inheritedEventCount: writer.inheritedEventCount, eventState: saved.eventState }))
       const session = preparation.session
-      // Native SessionTitle validates an exact live Session. Publish only that
-      // Session lifetime, with its paired disposal; no Agent, Inbox claim or wake.
-      if (options.metadata) { detach = this.ctx.sessions.enter(session); this.ctx.sessions.announce(session) }
+      // 原生Session仅在完整创建通知后允许append；这个有限写窗口不创建Agent或领取输入。
+      detach = this.ctx.sessions.enter(session)
+      this.ctx.sessions.announce(session)
       let count = SessionLogOffset(saved.canonicalCount)
       return { session, owner: writer.owner, flush: async () => { const suffix = session.snapshotEvents(count); if (suffix.length) { await writer.append(suffix); count = session.seq }; await writer.flush() }, close }
     } catch (error) { await close(); throw error }
@@ -524,12 +525,16 @@ export class ProjectOwnedControl implements ProjectControlPort, ProjectFactoryLi
     const writer = cold.handle
     try {
       using preparation = SessionPreparation.create(this.ctx.sessions.prepare(id, { seed: [...cold.events], meta: writer.header, inheritedEventCount: writer.inheritedEventCount, eventState: cold.eventState }))
-      let inbox = inboxProjectionDefinition.init()
-      for (const event of cold.events) inbox = inboxProjectionDefinition.apply(inbox, event)
-      const start = cold.canonicalCount
-      for (const target of ['next-step', 'next-turn'] as const) for (let index = inbox[target].length - 1; index >= 0; index--) if (selected === undefined || selected.includes(inbox[target][index]!.id)) preparation.session.append('agent/inbox/spliced', { target, start: index, removedCount: 1, inserted: [] })
-      await writer.append(preparation.session.snapshotEvents(SessionLogOffset(start)))
-      await writer.flush()
+      const detach = this.ctx.sessions.enter(preparation.session)
+      try {
+        this.ctx.sessions.announce(preparation.session)
+        let inbox = inboxProjectionDefinition.init()
+        for (const event of cold.events) inbox = inboxProjectionDefinition.apply(inbox, event)
+        const start = cold.canonicalCount
+        for (const target of ['next-step', 'next-turn'] as const) for (let index = inbox[target].length - 1; index >= 0; index--) if (selected === undefined || selected.includes(inbox[target][index]!.id)) preparation.session.append('agent/inbox/spliced', { target, start: index, removedCount: 1, inserted: [] })
+        await writer.append(preparation.session.snapshotEvents(SessionLogOffset(start)))
+        await writer.flush()
+      } finally { detach() }
     } finally { await writer.close() }
   }
   retire(id: SessionId, options?: { handle?: AgentHandle }): Promise<{ status: 'stopped' | 'unconfirmed'; errors: readonly unknown[] }> {
@@ -549,7 +554,7 @@ export class ProjectOwnedControl implements ProjectControlPort, ProjectFactoryLi
         if (errors.length) return { status: 'unconfirmed' as const, errors }
         if (agent !== undefined && handle === undefined) throw new Error('Projects live Agent has no real owned handle')
         if (agent !== undefined) {
-          const descendants = this.factory().handles().filter(entry => entry.handle.agent !== agent && this.ctx.agents.isOwnedBy(entry.handle.agent.id, agent))
+          const descendants = this.factory().handles().filter(entry => entry.handle.agent !== agent && this.factory().owns(entry.handle.agent, agent))
           await this.ctx.get('subagents')?.drainDescendants([agent])
           const released = await Promise.allSettled(descendants.reverse().map(entry => entry.handle.dispose()))
           const failures = released.flatMap(result => result.status === 'rejected' ? [result.reason] : [])

@@ -102,7 +102,7 @@ const ChatNodeList = memo(function ChatNodeList({ entries, useChatGroup, pending
 export function ChatView({
   useSession, useSessionStatus, useChat, useChatNode, useChatNodeProcess, useChatGroup, useConversation, useSessions, useStore, actions, renderSlot,
   sessionId, openFile, openSkill, openExternalLink, loadOlder, loadThrough, loadImage, inspectCall, chatScroll, forkAt, fileMentions,
-  usePresentation, useProjection, projectFocus, projectFileImageRevision, projectResolveFileImage, projectStatusText, t,
+  usePresentation, useProjection, projectFocus, projectFileImageRevision, projectResolveFileImage, projectFileDrag, projectStatusText, t,
 }: ChatViewSlotProps) {
   const projectRoot = useRef<HTMLDivElement>(null)
   useEffect(() => {
@@ -137,12 +137,13 @@ export function ChatView({
   const cwd = useSessions(s => s.byId[sessionId]?.cwd)
   const fileImageRevision = useSyncExternalStore(projectFileImageRevision.subscribe, projectFileImageRevision.getSnapshot)
   const fileImages = useMemo(() => ({
+    fileDrag: projectFileDrag,
     resolve: projectResolveFileImage,
     labels: {
       open: t('image.open'), loading: t('image.loading'), failed: t('image.failed'),
       dialog: t('image.dialog'), close: t('image.close'),
     },
-  }), [projectResolveFileImage, fileImageRevision, t])
+  }), [projectResolveFileImage, projectFileDrag, fileImageRevision, t])
   const running = useSession(s => s.running)
   const pendingInteraction = useSessionStatus(status => status.get(sessionId)?.pendingInteraction)
   const openState = useSession(s => s.openState)

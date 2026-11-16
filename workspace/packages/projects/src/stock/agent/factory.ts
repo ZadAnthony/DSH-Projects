@@ -1,21 +1,22 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { AsyncLocalStorage } from 'node:async_hooks'
-import type { AgentFactory, AgentHandle, AgentOptions, AgentSetup, CreateAgentOptions, ResumeAgentOptions, Agent, TurnBoundaryProjection } from '@deepseek-ai/dsh-agent'
-import { ReasoningEffortId } from '@deepseek-ai/dsh-llm'
+import { modelSelectionProjectionDefinition } from '@deepseek-ai/dsh-agent'
+import type { AgentFactory, AgentHandle, AgentOptions, AgentSetup, CreateAgentOptions, ResumeAgentOptions, Agent, InboxState, ModelSelectionProjectionState } from '@deepseek-ai/dsh-agent'
 import type {} from '@deepseek-ai/dsh-api-session-controller/types'
 import { interruptedTurnClosers, SessionPreparation, SessionLogOffset, SessionSeq, type Session, type SessionId } from '@deepseek-ai/dsh-session'
 import type { SessionHandle, SessionPersistence } from '@deepseek-ai/dsh-session-persistence'
-import type { ProjectionDefinition } from '@deepseek-ai/dsh-session-projection'
-import { z } from 'zod'
+import type { ProjectionHandle } from '@deepseek-ai/dsh-session-projection'
 import { createProjectRecordingPort, projectRecordingPolicy } from '../recording/index.ts'
 import { inboxProjectionDefinition } from './inbox.ts'
-import { userInputTimingProjectionDefinition } from '../../input-timing.ts'
+import { userInputTimingProjectionDefinition, type UserInputTimingState } from '../../input-timing.ts'
 import { ProjectAgent } from './driver.ts'
 import { installProjectDriverSchemas, type ProjectDriverPersistence, type ProjectRequestHooks, type ProjectSchemaPersistence } from '../request/dispatch.ts'
 import { transformProjectDispatchForRun, initializeProjectRequestProjection, applyProjectRequestProjection, disposeProjectRequestProjection } from '../request/records.ts'
 import { transformProjectRawForRun } from '../recording/records.ts'
 import { ProjectSessionPersistence, ProjectSessionHandle } from '../persistence/index.ts'
 import type { CommittedRange, ProjectPayloadRef, ProjectPayloadReference, ProjectWriterRoute } from '../persistence/types.ts'
+import { projectAgentParent } from './ownership.ts'
+export { withProjectAgentParent, projectAgentParent } from './ownership.ts'
 
 export interface ProjectFactoryLifecycle {
   assertCreation(id: SessionId, parent?: Agent, kind?: 'create' | 'resume'): void
@@ -34,26 +35,6 @@ interface OwnedPersistence extends SessionPersistence, ProjectSchemaPersistence 
   registerSessionOwner(id: SessionId, owner: { projectId: string; logicalSessionId: string }): void
   resolveOwner(id: SessionId): Promise<{ projectId: string; logicalSessionId: string } | undefined>
 }
-const turnBoundaryProjectionDefinition = {
-  key: 'turnBoundary', stateVersion: 2,
-  stateSchema: z.object({
-    openTurnStartSeq: z.number().int().nonnegative().transform(SessionSeq).nullable(),
-    lastStepStartSeq: z.number().int().nonnegative().transform(SessionSeq).nullable(),
-    lastStepBoundary: z.object({ kind: z.enum(['start', 'end']), seq: z.number().int().nonnegative().transform(SessionSeq) }).nullable(),
-    lastTurn: z.number().int().nonnegative(),
-  }),
-  init: () => ({ openTurnStartSeq: null, lastStepStartSeq: null, lastStepBoundary: null, lastTurn: 0 }),
-  apply: (state, event) => {
-    switch (event.type) {
-      case 'turn/start': return { ...state, openTurnStartSeq: event.seq, lastTurn: event.data.turn }
-      case 'turn/end': return { ...state, openTurnStartSeq: null }
-      case 'step/start': return { ...state, lastStepStartSeq: event.seq, lastStepBoundary: { kind: 'start', seq: event.seq } }
-      case 'step/end': return { ...state, lastStepBoundary: { kind: 'end', seq: event.seq } }
-      default: return state
-    }
-  },
-} satisfies ProjectionDefinition<'turnBoundary', TurnBoundaryProjection>
-
 async function abortable<T>(job: PromiseLike<T> | T, signal: AbortSignal, abandoned?: (value: T) => void | PromiseLike<void>): Promise<T> {
   const pending = Promise.resolve(job)
   const settleCancelledOwnership = async (reason: unknown): Promise<void> => {
@@ -252,19 +233,26 @@ export class ProjectAgentFactory implements AgentFactory {
   private closing: Promise<void> | undefined
   private readonly unregister: () => void
   private readonly persistence: OwnedPersistence
+  private readonly projectionsReady: Promise<void>
+  private modelProjection!: ProjectionHandle<ModelSelectionProjectionState>
+  private inboxProjection!: ProjectionHandle<InboxState>
+  private timingProjection!: ProjectionHandle<UserInputTimingState>
   constructor(private readonly ctx: Context, private readonly options: ProjectAgentFactoryOptions = {}) {
     if (!Number.isSafeInteger(options.maxParallelToolCalls ?? 4) || (options.maxParallelToolCalls ?? 4) < 1) throw new Error('invalid Project maxParallelToolCalls')
     this.lifecycle = options.lifecycle
     this.persistence = ctx.sessionPersistence as OwnedPersistence
     if (!this.persistence?.registerProjectEventSchema) throw new Error('Projects requires its own SessionPersistence')
     installProjectDriverSchemas(this.persistence)
-    ctx.sessionProjections.register(turnBoundaryProjectionDefinition)
-    ctx.sessionProjections.register(inboxProjectionDefinition)
-    ctx.sessionProjections.register(userInputTimingProjectionDefinition)
+    this.projectionsReady = Promise.all([
+      ctx.sessionProjections.register(modelSelectionProjectionDefinition),
+      ctx.sessionProjections.register(inboxProjectionDefinition),
+      ctx.sessionProjections.register(userInputTimingProjectionDefinition),
+    ]).then(([model, inbox, timing]) => { this.modelProjection = model; this.inboxProjection = inbox; this.timingProjection = timing })
+    void this.projectionsReady.catch(() => {})
     this.unregister = ctx.agents.setFactory(this)
     ctx.effect(() => () => this.close(), 'projects.agentFactory')
-    ctx.systemPrompt.variable('provider', context => context.agent?.options.provider)
-    ctx.systemPrompt.variable('model', context => context.agent?.options.model)
+    ctx.systemPrompt.variable('provider', context => context.modelSelection?.provider ?? context.agent?.options.provider)
+    ctx.systemPrompt.variable('model', context => context.modelSelection?.model ?? context.agent?.options.model)
     ctx.systemPrompt.variable('cwd', context => context.agent?.session.header.cwd)
   }
   setLifecycle(owner: ProjectFactoryLifecycle): () => void {
@@ -274,8 +262,19 @@ export class ProjectAgentFactory implements AgentFactory {
   }
   handles(): readonly { handle: AgentHandle; parent?: Agent }[] { return [...this.active].map(handle => ({ handle, parent: this.parents.get(handle) })) }
   handle(id: SessionId, epoch?: Agent): AgentHandle | undefined { return [...this.active].find(handle => handle.agent.id === id && (epoch === undefined || handle.agent === epoch)) }
+  userInputTiming(session: Session): UserInputTimingState { return this.timingProjection.stateOf(session) }
+  /** 只沿本次真实句柄的父关系判断运行责任，不从持久header推断当前归属。 */
+  owns(agent: Agent, root: Agent): boolean {
+    let current: Agent | undefined = agent
+    while (current !== undefined) {
+      if (current === root) return true
+      const handle = [...this.active].find(value => value.agent === current)
+      current = handle === undefined ? undefined : this.parents.get(handle)
+    }
+    return false
+  }
   pendingFor(ids: ReadonlySet<SessionId>): readonly Promise<unknown>[] {
-    return [...this.creating].filter(([, value]) => ids.has(value.id) || value.parent !== undefined && (ids.has(value.parent.id) || [...ids].some(id => { const root = this.ctx.agents.get(id); return root !== undefined && this.ctx.agents.isOwnedBy(value.parent!.id, root) }))).map(([pending]) => pending)
+    return [...this.creating].filter(([, value]) => ids.has(value.id) || value.parent !== undefined && (ids.has(value.parent.id) || [...ids].some(id => { const root = this.ctx.agents.get(id); return root !== undefined && this.owns(value.parent!, root) }))).map(([pending]) => pending)
   }
   cancelCreations(ids: ReadonlySet<SessionId>): Promise<void> {
     const pending = this.pendingFor(ids).map(operation => ({ operation, creation: this.creating.get(operation) }))
@@ -308,10 +307,12 @@ export class ProjectAgentFactory implements AgentFactory {
   private assertActive(owner: Context): void { owner.fiber.assertActive(); this.shutdown.signal.throwIfAborted() }
   createAgent(ownerCtx: Context, options: CreateAgentOptions): Promise<AgentHandle> {
     this.assertActive(ownerCtx)
-    return this.creation(ownerCtx, options.sessionId, options.parentAgent, 'create', options.signal, signal => this.createOwned(ownerCtx, options, signal))
+    const parent = projectAgentParent()
+    return this.creation(ownerCtx, options.sessionId, parent, 'create', options.signal, signal => this.createOwned(ownerCtx, options, signal, parent))
   }
-  private async createOwned(ownerCtx: Context, options: CreateAgentOptions, signal: AbortSignal): Promise<AgentHandle> {
-    this.assertParent(options.parentAgent)
+  private async createOwned(ownerCtx: Context, options: CreateAgentOptions, signal: AbortSignal, parent?: Agent): Promise<AgentHandle> {
+    await abortable(this.projectionsReady, signal)
+    this.assertParent(parent)
     using preparation = SessionPreparation.create(this.ctx.sessions.prepare(options.sessionId, {
       ...options.seed === undefined ? {} : { seed: options.seed },
       ...options.meta === undefined ? {} : { meta: options.meta },
@@ -320,33 +321,35 @@ export class ProjectAgentFactory implements AgentFactory {
     let stored: SessionHandle | undefined
     try {
       signal.throwIfAborted()
-      if (this.options.resolveOwner) this.persistence.registerSessionOwner(options.sessionId, await abortable(this.options.resolveOwner(options.sessionId, options.parentAgent), signal))
+      if (this.options.resolveOwner) this.persistence.registerSessionOwner(options.sessionId, await abortable(this.options.resolveOwner(options.sessionId, parent), signal))
       stored = await abortable(this.persistence.create(preparation.session.header, { inheritedEventCount: preparation.session.inheritedEventCount, signal }), signal, handle => handle.close())
-      await this.assertProjectOwner(options.sessionId, options.parentAgent, signal)
+      await this.assertProjectOwner(options.sessionId, parent, signal)
       if (options.seed !== undefined && options.seed.length > 0 && preparation.session.header.isSeeded) {
         const parentId = preparation.session.header.parentSession
-        if (parentId === undefined || options.parentAgent !== undefined && options.parentAgent.id !== parentId) throw new Error('PROJECT_INHERITED_SOURCE_NOT_CONFIRMED')
+        if (parentId === undefined || parent !== undefined && parent.id !== parentId) throw new Error('PROJECT_INHERITED_SOURCE_NOT_CONFIRMED')
         const rebound = await (this.persistence as ProjectSessionPersistence).copyInheritedSeed(options.sessionId, parentId, options.seed,
           (event, original) => transformProjectRawForRun(transformProjectDispatchForRun(event, original), original), { signal })
         using copied = SessionPreparation.create(this.ctx.sessions.prepare(options.sessionId, { seed: [...rebound], meta: preparation.session.header, inheritedEventCount: preparation.session.inheritedEventCount, eventState: 'detached' }))
-        return await this.setupAndPublish(ownerCtx, copied.session, stored, 0, options.agentOptions ?? {}, options.setup, signal, 'startup', options.parentAgent, rebound)
+        return await this.setupAndPublish(ownerCtx, copied.session, stored, 0, options.agentOptions ?? {}, options.setup, signal, 'startup', parent, rebound)
       }
-      return await this.setupAndPublish(ownerCtx, preparation.session, stored, 0, options.agentOptions ?? {}, options.setup, signal, 'startup', options.parentAgent, options.seed ?? [])
+      return await this.setupAndPublish(ownerCtx, preparation.session, stored, 0, options.agentOptions ?? {}, options.setup, signal, 'startup', parent, options.seed ?? [])
     } catch (error) { try { await stored?.close() } catch (cleanup) { throw new AggregateError([error, cleanup], 'Project creation and journal release were not fully confirmed', { cause: error }) }; throw error }
   }
   resume(ownerCtx: Context, options: ResumeAgentOptions): Promise<AgentHandle> {
     this.assertActive(ownerCtx)
-    return this.creation(ownerCtx, options.resumeSessionId, options.parentAgent, 'resume', options.signal, signal => this.resumeOwned(ownerCtx, options, signal))
+    const parent = projectAgentParent()
+    return this.creation(ownerCtx, options.resumeSessionId, parent, 'resume', options.signal, signal => this.resumeOwned(ownerCtx, options, signal, parent))
   }
-  private async resumeOwned(ownerCtx: Context, options: ResumeAgentOptions, signal: AbortSignal): Promise<AgentHandle> {
-    this.assertParent(options.parentAgent)
+  private async resumeOwned(ownerCtx: Context, options: ResumeAgentOptions, signal: AbortSignal, parent?: Agent): Promise<AgentHandle> {
+    await abortable(this.projectionsReady, signal)
+    this.assertParent(parent)
     let stored: SessionHandle | undefined
     try {
       signal.throwIfAborted()
       const resumed = await abortable((this.persistence as ProjectSessionPersistence).openForRun(options.resumeSessionId,
         (event, original) => transformProjectRawForRun(transformProjectDispatchForRun(event, original), original), { signal }), signal, value => value.handle.close())
       stored = resumed.handle
-      await this.assertProjectOwner(options.resumeSessionId, options.parentAgent, signal)
+      await this.assertProjectOwner(options.resumeSessionId, parent, signal)
       const cold = resumed
       const closers = interruptedTurnClosers(cold.events)
       if (closers.length) await stored.append(closers)
@@ -354,7 +357,7 @@ export class ProjectAgentFactory implements AgentFactory {
         seed: [...cold.events, ...closers], meta: structuredClone(stored.header),
         inheritedEventCount: stored.inheritedEventCount, eventState: cold.eventState,
       }))
-      return await this.setupAndPublish(ownerCtx, preparation.session, stored, cold.events.length + closers.length, options.agentOptions ?? {}, options.setup, signal, 'resume', options.parentAgent, [...cold.events, ...closers])
+      return await this.setupAndPublish(ownerCtx, preparation.session, stored, cold.events.length + closers.length, options.agentOptions ?? {}, options.setup, signal, 'resume', parent, [...cold.events, ...closers])
     } catch (error) { try { await stored?.close() } catch (cleanup) { throw new AggregateError([error, cleanup], 'Project creation and journal release were not fully confirmed', { cause: error }) }; throw error }
   }
   private assertParent(parent: Agent | undefined): void {
@@ -368,32 +371,18 @@ export class ProjectAgentFactory implements AgentFactory {
     const parentOwner = await abortable(this.persistence.resolveOwner(parent.id), signal)
     if (!parentOwner || parentOwner.projectId !== owner.projectId) throw new Error('Project parent belongs to a different project')
   }
-  private restoredModelOptions(session: Session, options: AgentOptions): AgentOptions {
-    // A caller-owned route is one pair; never splice a half override into an
-    // unrelated retained route or substitute the profile's current default.
-    if (options.provider !== undefined || options.model !== undefined) return options
-    const selection = this.ctx.sessionProjections.stateOf(session, 'modelSelection')
-    if (selection === undefined) return options
-    const header = session.requestHeader(), selected = selection.pending ?? header?.config
-    if (!selected?.provider || !selected.model) return options
-    const retainedEffort = selection.pending !== null ? selection.pending.reasoningEffort
-      : header?.adapterDefaults?.reasoningEffort === true ? undefined : selected.reasoningEffort
-    const effort = options.reasoningEffort ?? retainedEffort
-    return { ...options, provider: selected.provider, model: selected.model,
-      ...(effort === undefined ? {} : { reasoningEffort: ReasoningEffortId(effort) }) }
-  }
   private async setupAndPublish(owner: Context, session: Session, stored: SessionHandle, storedCount: number, options: AgentOptions, setup: AgentSetup | undefined, signal: AbortSignal, source: 'startup' | 'resume', parent?: Agent, seed: readonly import('@deepseek-ai/dsh-session').SessionEvent[] = []): Promise<AgentHandle> {
     this.assertActive(owner)
     signal.throwIfAborted()
     if (options.maxTokens !== undefined && (!Number.isSafeInteger(options.maxTokens) || options.maxTokens <= 0)) throw new Error('invalid Project maxTokens')
     initializeProjectRequestProjection(session, seed)
-    // Read the restored Session only after its request projection is ready.
-    const agentOptions = source === 'resume' ? this.restoredModelOptions(session, options) : options
     const detachProjection = this.ctx.on('session/event', (subject, event) => { if (subject === session) applyProjectRequestProjection(session, event) })
     let agent!: ProjectAgent
     const writer = new ProjectWritePath(this.ctx, session, stored, storedCount, () => agent?.haltPersistence())
     const dependencies = this.ctx.inject(['agents', 'sessions', 'sessionPersistence', 'sessionProjections', 'systemPrompt', 'llm', 'tools'], runtimeCtx => {
-      agent = new ProjectAgent(runtimeCtx, session.id, agentOptions, session, writer, this.options.request, this.options.maxParallelToolCalls ?? 4)
+      agent = new ProjectAgent(runtimeCtx, session.id, options, session, writer,
+        { modelSelection: this.modelProjection.readerFor(session), inbox: this.inboxProjection.readerFor(session) },
+        this.options.request, this.options.maxParallelToolCalls ?? 4)
     })
     try { await abortable(dependencies.await(), signal) }
     catch (error) { const cleanup = await Promise.allSettled([dependencies.dispose(), writer.close()]); detachProjection(); disposeProjectRequestProjection(session); const errors = cleanup.flatMap(value => value.status === 'rejected' ? [value.reason] : []); if (errors.length) throw new AggregateError([error, ...errors], 'Project driver setup and close failed', { cause: error }); throw error }
@@ -423,23 +412,25 @@ export class ProjectAgentFactory implements AgentFactory {
     unfollowOwner = owner.effect(() => () => handle.dispose(), `projects.agent(${session.id})`)
     try {
       await agent.runMaintenance(async () => {
-        const recordingPolicy = parent === undefined ? undefined : projectRecordingPolicy(parent)
-        if (recordingPolicy !== undefined) createProjectRecordingPort().install(agent, recordingPolicy)
-        const baseCommit = await abortable(this.options.setupBase?.(agent.ctx, agent, parent), signal, () => {})
-        const commit = await abortable(setup?.(agent.ctx, agent), signal, () => {})
-        signal.throwIfAborted(); this.assertActive(owner)
-        baseCommit?.commit()
-        commit?.commit()
-        await writer.attach()
-        await this.lifecycle?.validateCreation?.(session.id, session.header, parent, source === 'startup' ? 'create' : 'resume')
-        signal.throwIfAborted()
         const publication = Promise.withResolvers<void>()
         publishing = publication.promise
         try {
+          await writer.attach()
           this.lifecycle?.assertCreation(session.id, parent, source === 'startup' ? 'create' : 'resume')
           detachSession = agent.ctx.sessions.enter(session)
-          detachAgent = this.ctx.agents.enter(agent, parent)
           agent.ctx.sessions.announce(session)
+          signal.throwIfAborted()
+          const recordingPolicy = parent === undefined ? undefined : projectRecordingPolicy(parent)
+          if (recordingPolicy !== undefined) createProjectRecordingPort().install(agent, recordingPolicy)
+          const baseCommit = await abortable(this.options.setupBase?.(agent.ctx, agent, parent), signal, () => {})
+          const commit = await abortable(setup?.(agent.ctx, agent), signal, () => {})
+          signal.throwIfAborted(); this.assertActive(owner)
+          baseCommit?.commit()
+          commit?.commit()
+          await this.lifecycle?.validateCreation?.(session.id, session.header, parent, source === 'startup' ? 'create' : 'resume')
+          signal.throwIfAborted()
+          this.lifecycle?.assertCreation(session.id, parent, source === 'startup' ? 'create' : 'resume')
+          detachAgent = this.ctx.agents.enter(agent)
           await this.ctx.agents.announce(agent, source, signal)
           signal.throwIfAborted()
         } finally { publication.resolve() }

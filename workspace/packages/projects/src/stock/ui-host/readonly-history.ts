@@ -77,14 +77,13 @@ export class ReadonlySessionHistoryController {
    */
   async page(request: SessionPageRequest, signal: AbortSignal): Promise<SessionPage> {
     validatePageRequest(request)
-    const throughSeq: SessionSeqCursor = request.throughSeq === -1
-      ? -1
-      : SessionSeq(request.throughSeq)
     const beforeSeq = request.beforeSeq === undefined
       ? undefined
       : SessionLogOffset(request.beforeSeq)
     return this.withSource(request.address, signal, async source => {
       const sourceCursor: SessionSeqCursor = source.directory.nextSeq === 0 ? -1 : SessionSeq(source.directory.nextSeq - 1)
+      const throughSeq: SessionSeqCursor = request.throughSeq === undefined ? sourceCursor
+        : request.throughSeq === -1 ? -1 : SessionSeq(request.throughSeq)
       if (throughSeq > sourceCursor) {
         throw new RemoteError(
           'gateway/bad-request',
@@ -306,9 +305,9 @@ function wireAssistantStreamFrame(
 
 
 function validatePageRequest(request: SessionPageRequest): void {
-  if (!Number.isSafeInteger(request.throughSeq)
+  if (request.throughSeq !== undefined && (!Number.isSafeInteger(request.throughSeq)
     || request.throughSeq < -1
-    || Object.is(request.throughSeq, -0)) {
+    || Object.is(request.throughSeq, -0))) {
     throw new RemoteError('gateway/bad-request', 'throughSeq must be an integer greater than or equal to -1', {})
   }
   if (request.beforeSeq !== undefined

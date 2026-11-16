@@ -28,7 +28,7 @@ const rejected = async (operation: string) => ({ ok: false as const, error: proj
 class ProjectReadRemote implements SessionRemotes {
   readonly session: SessionRemote
   readonly commands: SessionRemotes['commands'] = { execute: () => rejected('command'), list: () => rejected('command.list') }
-  readonly subagents: SessionRemotes['subagents'] = { prompt: () => rejected('subagent.prompt'), interruptByParent: () => rejected('subagent.interrupt') }
+  readonly subagents: SessionRemotes['subagents'] = { prompt: () => rejected('subagent.prompt'), interruptByUser: () => rejected('subagent.interrupt') }
   constructor(port: ProjectReadRemotePort, exact: ProjectFileBinding,
     private readonly connection: Pick<ConnectionHandle, 'generation'>, readonly $host: RemoteHostFacts) {
     this.session = {
@@ -56,6 +56,11 @@ class ProjectReadRemote implements SessionRemotes {
         if (request.sessionId !== exact.hostSessionId) throw projectReadOnlyError('foreign attachment')
         return port.uiAttachment(request)
       },
+      events: () => rejected('events'),
+      observeEvent: () => { throw projectReadOnlyError('observeEvent') },
+      observeProjections: () => { throw projectReadOnlyError('observeProjections') },
+      observeState: () => { throw projectReadOnlyError('observeState') },
+      state: () => rejected('state'), wait: () => rejected('wait'),
       control: () => { throw projectReadOnlyError('control') },
       prompt: () => rejected('prompt'), cancel: () => rejected('cancel'), updateQueue: () => rejected('updateQueue'),
       modelCatalog: () => rejected('modelCatalog'), selectModel: () => rejected('selectModel'),

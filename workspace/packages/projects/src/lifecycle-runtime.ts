@@ -1,4 +1,5 @@
 import { isDeepStrictEqual } from 'node:util'
+import { inboxProjectionDefinition } from './stock/agent/inbox.ts'
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type {} from '@deepseek-ai/dsh-api-session-controller'
@@ -140,8 +141,9 @@ export class ProjectExecutionLifecycle {
     const cut = this.cuts.get(session.id)
     if (cut === undefined || cut.inbox !== undefined) return
     if (!sameOwnedCreationHeader(cut.header, session.header)) throw new Error('归档发布的创建身份发生变化。')
-    const state = this.ctx.sessionProjections.stateOf(session, 'inbox')
-    if (state === undefined) throw new Error('真实初始Inbox投影不可读。')
+    // 初次Session发布可能早于Agent创建；复用Inbox owner的折叠读取这一同步切点。
+    let state = inboxProjectionDefinition.init()
+    for (const event of session.snapshotEvents()) state = inboxProjectionDefinition.apply(state, event)
     cut.inbox = { hostSessionId: session.id, messageIds: cut.preserve ? [] : [...state['next-step'], ...state['next-turn']].map(message => message.id) }
   }
 

@@ -50,7 +50,6 @@ export class ProjectSessions implements ISessions {
   private readonly logicalCarriers = new Map<string, CarrierAddress>()
   private readonly carrierWriteAccess = new Map<SessionId, boolean>()
   private readonly subagentAddresses = new Map<SessionId, SubagentAddress>()
-  private readonly agentAvailable = new Map<SessionId, boolean>()
   private control: ReturnType<typeof createSessionControlStream>
   private controlTerminal = false
   private controlReplacement: Promise<void> | undefined
@@ -146,14 +145,13 @@ export class ProjectSessions implements ISessions {
       this.controlError.set(undefined)
       return
     }
-    this.projections(frame.sessionId).apply(frame.key, frame.value, SessionSeq(frame.seq))
+    for (const change of frame.changes) this.projections(frame.sessionId).apply(change.key, change.val, SessionSeq(frame.seq))
   }
 
   adoptCatalog(items: readonly NativeSummary[]): void {
     const before = this.list.getSnapshot()
     const byId: SessionListState['byId'] = {}
     for (const item of items) {
-      this.agentAvailable.set(item.sessionId, item.agentAvailable)
       const previous = before.byId[item.sessionId]
       const retainedBy = this.retainInfo(item.sessionId).getSnapshot().retainedBy
       byId[item.sessionId] = {
@@ -267,8 +265,7 @@ export class ProjectSessions implements ISessions {
     let record = this.generations.get(id)
     if (record === undefined) {
       const scope = createScope(this.ctx, id)
-      const native = new Session(id, this.remote, { ...(addressed === undefined ? {} : { address: addressed,
-        parentAvailable: this.agentAvailable.get(addressed.parentSessionId) }), projections: this.projections(id), onEngaged: () => {
+      const native = new Session(id, this.remote, { ...(addressed === undefined ? {} : { address: addressed }), projections: this.projections(id), onEngaged: () => {
         const current = this.list.getSnapshot()
         const row = current.byId[id]
         if (row !== undefined) this.list.set({ ...current, byId: { ...current.byId, [id]: { ...row, blank: false } } })

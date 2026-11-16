@@ -1,6 +1,7 @@
 /** Projects-owned invocation identity; the stock Tools package does not define it.
  * Preserves the 41.3 persisted fields without adding an export to native DSH.
  */
+import type {} from '@deepseek-ai/dsh-tool-executor-ptc/types'
 import type { Session, SessionEvent, SessionId, SessionSeq } from '@deepseek-ai/dsh-session'
 import type { ToolCallId } from '@deepseek-ai/dsh-llm'
 

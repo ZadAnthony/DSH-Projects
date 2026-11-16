@@ -39,6 +39,7 @@ export class ProjectSubagentCapture {
     }
     this.readOnly = this.address.mode !== 'continuable'
   }
+  get writable(): boolean { return !this.ended && !this.readOnly && this.options.isRootCurrent(this.rootProof) }
   private assertOpen(): void { if (this.ended) throw new Error('PROJECT_SUBAGENT_DOMAIN_ENDED') }
   assertAddress(address: SessionAddress): void {
     this.assertOpen()

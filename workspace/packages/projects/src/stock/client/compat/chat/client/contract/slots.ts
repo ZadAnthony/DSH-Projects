@@ -118,7 +118,7 @@ export interface ChatFileMentions {
    * @param sessionId - viewed Session, including when history is inherited from a fork.
    * @returns link resolver when available.
    */
-  forClosing(owner: TurnTailOwnerProps, sessionId: SessionId): MarkdownFileMentions | undefined
+  forClosing(owner: TurnTailOwnerProps, sessionId: SessionId, getFileTriggerProps?: (path: string) => import('@deepseek-ai/dsh-client-ui-context-menu/client').ContextMenuTriggerProps): MarkdownFileMentions | undefined
 }
 
 declare module '@deepseek-ai/cordis' {
@@ -205,6 +205,7 @@ export interface PresentationInjected {
 /** Full props of one keyed Chat renderer. */
 export type ChatNodeViewProps<Kind extends ChatNodeKind = ChatNodeKind> =
   PropsRuntime<'conversation.chat.node', Kind> & PropsLocale<'chat'> & PropsRenderFactories
+  & { readonly fileMentions?: ChatNodeOwnerProps['fileMentions'] }
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface SessionStandardProps {
@@ -245,6 +246,7 @@ export interface ChatViewInjected {
   readonly projectStatusText: PropsLocale<'projects-chat-status'>['t']
   readonly projectFileImageRevision: ObservableSnapshot<number>
   readonly projectResolveFileImage: (path: string) => string
+  readonly projectFileDrag: import('@deepseek-ai/dsh-client-ui-primitives').FileDragActions
   readonly projectFocus?: import('../../../../read/install-chat.tsx').ProjectChatFocusRegistration | undefined
   hooks: {
     /** Live presentation policy derived from the accepted work-details mode. */

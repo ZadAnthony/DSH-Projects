@@ -242,14 +242,10 @@ export function EmbeddedConversation({
       ? "engaging"
       : "blank";
   const summaryBlank = useSessions((state) => state.byId[sessionId]?.blank);
-  const parentAvailabilityPending =
-    session.subagent?.address.mode === "continuable" &&
-    session.subagent.parentAvailable === undefined;
   const settling =
     (shellPhase === "blank" &&
       session.openState === "loading" &&
-      summaryBlank !== true) ||
-    parentAvailabilityPending;
+      summaryBlank !== true);
   const phase = settling
     ? "settling"
     : shellPhase === "blank"
@@ -910,7 +906,7 @@ function ProjectList({
         title={t(archived ? "list.archived.empty.title" : "list.empty.title")}
         description={t(archived ? "list.archived.empty.description" : "list.empty.description")} />
       : <Menu className="dsh-projects__project-list-menu" open={menuProject !== undefined} portal autoFocus align="end"
-        getAnchorRect={() => menuTarget?.trigger.isConnected === true ? menuTarget.trigger.getBoundingClientRect() : null}
+        anchorRef={{ current: menuTarget?.trigger.isConnected === true ? menuTarget.trigger : null }}
         items={menuProject === undefined ? [] : [
           { id: "rename", label: t("project.rename"), disabled: busy || menuProject.sourceLifecycle !== undefined },
           { id: "lifecycle", label: t(pendingRestoreProjectId === menuProject.id ? "p5.panel.continueProjectRestore" : menuProject.archived ? "p5.panel.restoreProject" : "p5.panel.archiveProject"), disabled: busy || menuProject.sourceLifecycle !== undefined },

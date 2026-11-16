@@ -21,10 +21,10 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-Adapted from DeepSeek DSH 639ed015397290b3745d163aafe02ffee4aa3f84
-packages/core/agent-loop/src/tool-calls.ts
+Adapted from DeepSeek DSH 38a6a5c965aa99ab525161efb7cc5cf1fe62fced
+packages/core/tools/src/batch.ts
 */
-// MIT; adapted from DeepSeek DSH 639ed015397290b3745d163aafe02ffee4aa3f84 packages/core/agent-loop/src/tool-calls.ts
+// MIT; adapted from DeepSeek DSH 38a6a5c965aa99ab525161efb7cc5cf1fe62fced packages/core/tools/src/batch.ts
 /**
  * Schedules one assistant step's tool calls. Exclusive calls form barriers;
  * parallel calls use a bounded rolling pool and are reclassified before start.
@@ -35,15 +35,15 @@ packages/core/agent-loop/src/tool-calls.ts
  * Abort records synthetic error results for skipped calls so replay stays
  * valid. A terminal scheduler failure rejects after draining; the owning step
  * records conservative recovery results before closing.
- * @module dsh-agent-loop/tool-calls
+ * @module projects/tools/batch
  */
 
 import { withProjectToolCall, bindProjectToolToken, releaseProjectToolToken } from './runtime.ts'
 import type { ProjectDriverPersistence } from '../request/dispatch.ts'
-import type { Context } from '@deepseek-ai/cordis'
 import { createToolResultMessage, type ToolCallBlock } from '@deepseek-ai/dsh-llm'
 import type { Session, SessionSeq, UserMessage } from '@deepseek-ai/dsh-session'
-import { TOOL_ABORTED_BEFORE_DISPATCH, TOOL_RUNTIME_SCHEDULER, type ToolExecutionInput, type ToolExecutionMode, type ToolExecutionResult, type ToolRunContext } from '@deepseek-ai/dsh-tools'
+import { TOOL_ABORTED_BEFORE_DISPATCH, type ToolBatchInput, type ToolExecutionInput, type ToolExecutionMode, type ToolExecutionResult, type ToolRunContext } from '@deepseek-ai/dsh-tools'
+import type { ToolExecutionPipeline } from '@deepseek-ai/dsh-tools/pipeline'
 import { assertNever } from '@deepseek-ai/dsh-util-values'
 
 /** One tool call after argument parsing, ready to schedule. */
@@ -79,25 +79,25 @@ interface GroupOutcome {
  * The committed step's AgentLoop driver boundary supplies the initiating Agent
  * that becomes each explicit {@link ToolExecutionInput.agent}.
  *
- * @param ctx - loop context that owns the tool registry and carries the initiating Agent.
- * @param turn - current turn number.
- * @param step - current step number.
- * @param toolCalls - assistant calls in model order.
- * @param signal - abort signal shared by the step.
- * @param acceptContext - accepts committed result context for the next step boundary.
+ * @param input - actual model batch, step admission, Agent, logging step and cancellation.
+ * @param pipeline - selected executor's public invocation pipeline.
+ * @param persistence - actual Projects writer for this Agent.
+ * @param acceptContext - delivers ordered context after the corresponding result is committed.
+ * @param maxParallel - selected executor's default root concurrency.
  */
-export async function executeToolCalls(
-  ctx: Context,
-  turn: number,
-  step: number,
-  toolCalls: ToolCallBlock[],
-  signal: AbortSignal,
-  acceptContext: (context: UserMessage) => void,
-  maxParallelToolCalls = 4,
+export async function executeProjectToolBatch(
+  input: ToolBatchInput,
+  pipeline: ToolExecutionPipeline,
   persistence: ProjectDriverPersistence,
+  acceptContext: (context: UserMessage) => void,
+  maxParallel: () => number,
 ): Promise<{ concluded: boolean }> {
-  const agent = ctx.agents.requireInitiator()
+  const { calls: toolCalls, signal, agent, toolSet, log } = input
+  if (agent === undefined || log === undefined) throw new Error('Projects durable tool batches require an Agent and committed model step')
+  const { turn, step } = log
   const { session } = agent
+  const maxParallelToolCalls = input.maxParallelToolCalls ?? maxParallel()
+  if (!Number.isInteger(maxParallelToolCalls) || maxParallelToolCalls < 1) throw new RangeError('maxParallelToolCalls must be a positive integer')
 
   // Inputs are distinct because tools/execute wrappers may replace `exec.signal`.
   const planned: PlannedCall[] = toolCalls.map(block => ({
@@ -108,6 +108,7 @@ export async function executeToolCalls(
       arguments: parseArguments(block.arguments),
       agent,
       signal,
+      ...toolSet === undefined ? {} : { toolSet },
     },
   }))
 
@@ -117,10 +118,10 @@ export async function executeToolCalls(
     // Commit before classifying again so registry changes affect unstarted calls.
     // oxlint-disable-next-line typescript/no-non-null-assertion -- bounded by the loop condition
     const first = planned[next]!
-    const mode = ctx.tools.executionMode(first.exec).kind
+    const mode = pipeline.executionMode(first.exec).kind
     const group = mode === 'parallel' ? planned.slice(next) : [first]
     const outcome = await runGroup(
-      ctx, turn, step, group, mode, signal, acceptContext, maxParallelToolCalls, persistence,
+      pipeline, agent, turn, step, group, mode, signal, acceptContext, maxParallelToolCalls, persistence,
     )
     next += outcome.consumed
     concluded ||= outcome.concluded
@@ -151,7 +152,8 @@ function parseArguments(raw: string): unknown {
  * for the owning step to record recovery results.
  */
 async function runGroup(
-  ctx: Context,
+  pipeline: ToolExecutionPipeline,
+  agent: NonNullable<ToolBatchInput['agent']>,
   turn: number,
   step: number,
   group: PlannedCall[],
@@ -161,7 +163,7 @@ async function runGroup(
   maxParallelToolCalls: number,
   persistence: ProjectDriverPersistence,
 ): Promise<GroupOutcome> {
-  const { session } = ctx.agents.requireInitiator()
+  const { session } = agent
   const slots: (Slot | undefined)[] = group.map(() => undefined)
   // Started slots retain their `tool/call` seq so the result can cite it.
   const callSeqs: Array<SessionSeq | undefined> = group.map(() => undefined)
@@ -183,8 +185,8 @@ async function runGroup(
       if (slot === undefined) break
       const call = group[committed]
       const result = slot.needsPost
-        ? await ctx.tools[TOOL_RUNTIME_SCHEDULER].finalize(slot.exec, slot.result)
-        : ctx.tools[TOOL_RUNTIME_SCHEDULER].finish(slot.exec, slot.result)
+        ? await pipeline.complete(slot.exec, { kind: 'post-result', result: slot.result })
+        : await pipeline.complete(slot.exec, { kind: 'final-result', result: slot.result })
       // Native result observers contain their exceptions. The Projects writer's
       // sticky failure must nevertheless stop this carrier before another call.
       persistence.assertHealthy()
@@ -213,13 +215,13 @@ async function runGroup(
     callSeqs[index] = appendToolCall(session, turn, step, call.block)
     await persistence.flush()
     started++
-    const prepared = await withProjectToolCall({ agent: ctx.agents.requireInitiator(), callSeq: callSeqs[index]!, persistence }, () => ctx.tools[TOOL_RUNTIME_SCHEDULER].prepare(call.exec))
+    const prepared = await withProjectToolCall({ agent, callSeq: callSeqs[index]!, persistence }, () => pipeline.prepare(call.exec))
     executions.add(prepared.exec.token)
-    withProjectToolCall({ agent: ctx.agents.requireInitiator(), callSeq: callSeqs[index]!, persistence }, () => bindProjectToolToken(prepared.exec))
+    withProjectToolCall({ agent, callSeq: callSeqs[index]!, persistence }, () => bindProjectToolToken(prepared.exec))
     throwSchedulerFailure()
     switch (prepared.kind) {
       case 'dispatch': {
-        const promise = ctx.tools[TOOL_RUNTIME_SCHEDULER].dispatch(prepared.exec).then(
+        const promise = pipeline.dispatch(prepared.exec).then(
           (outcome) => {
             slots[index] = { exec: prepared.exec, result: outcome.result, needsPost: outcome.kind === 'post-result' }
             return index
@@ -250,7 +252,7 @@ async function runGroup(
       // oxlint-disable-next-line typescript/no-non-null-assertion -- bounded by the loop condition
       const nextCall = group[nextToStart]!
       if (nextToStart > 0 && mode === 'parallel'
-        && ctx.tools.executionMode(nextCall.exec).kind !== 'parallel') break
+        && pipeline.executionMode(nextCall.exec).kind !== 'parallel') break
       persistence.assertHealthy()
       await startCall(nextToStart)
       nextToStart++

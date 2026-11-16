@@ -6,7 +6,7 @@ import type { TranslateNS } from '@deepseek-ai/dsh-client-locale/client'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { InboxState } from '@deepseek-ai/dsh-agent/types'
 import type { ConversationController, SessionInputResolver, SessionInput, InputActions, DraftInitializationOptions, DraftInitializationResult } from '@deepseek-ai/dsh-client-ui-conversation/client'
-import type { ModelSelectionProjection } from '@deepseek-ai/dsh-api-session-controller/types'
+import type { ModelSelectionProjection } from '@deepseek-ai/dsh-agent/types'
 import type { PlanProjection } from '@deepseek-ai/dsh-plan-mode/types'
 import { SessionInputShell, type CapturedInputScope } from '../compat/input/client/input/facade.ts'
 import type { InputTriggerController, DraftAttachmentId, CommandClaim } from '../compat/input/client/contract/input.ts'
@@ -148,11 +148,11 @@ export class ProjectDraftOwner {
       actx: lease.ctx, inputTriggers: trigger, assertCurrent: lease.assertCurrent, release: lease.release,
       signal: lease.signal, commandAttachments,
       guardClaim: claim => this.protectClaim(claim, lease.address, lease.ctx),
-      defaultSink: async (text, ids, mode, signal) => {
+      defaultSink: async (text, ids, mode, signal, accept) => {
         lease.assertCurrent()
         if (binding === undefined) throw new Error('PROJECT_INPUT_STALE: captured binding is unavailable')
         const guarded = guardedSession(binding.session, lease)
-        return this.registry.conversation().sendSession(guarded, text, ids, mode, AbortSignal.any([signal, lease.signal]))
+        return this.registry.conversation().sendSession(guarded, text, ids, mode, AbortSignal.any([signal, lease.signal]), accept)
       },
     }
   }
@@ -211,7 +211,7 @@ function guardedSession(session: SessionFace, lease: CarrierLease): SessionFace 
     updateQueue: async (id, action) => { lease.assertCurrent(); return session.updateQueue(id, action) },
     cancel: async () => { lease.assertCurrent(); return session.cancel() },
     rename: async title => { lease.assertCurrent(); return session.rename(title) },
-    loadOlder: () => session.loadOlder(), loadThrough: seq => session.loadThrough(seq),
+    loadOlder: options => session.loadOlder(options), consumeOlder: () => session.consumeOlder(), loadThrough: seq => session.loadThrough(seq),
     command: async line => { lease.assertCurrent(); return session.command(line) },
   }
 }
@@ -277,6 +277,7 @@ export class ProjectDraftRegistry implements SessionInputResolver {
     // stay bound to the captured physical scope, even though the logical shell survives.
     const face: SessionInput = {
       state: shell.state,
+      insertQuote: (text, summary) => available() && shell.insertQuote(text, summary),
       beginCommand: (claim, span) => available() && shell.beginCommand(claim, span),
       insertReference: (reference, span) => available() && shell.insertReference(reference, span),
       setDraft: text => { if (available()) shell.setDraft(text) },
@@ -313,6 +314,7 @@ export class ProjectDraftRegistry implements SessionInputResolver {
       return false
     }
     const face: InputActions = {
+      insertQuote: (text, summary) => available() && shell.insertQuote(text, summary),
       captureInsertion: () => available() ? shell.actions.captureInsertion() : { start: 0, end: 0, draftRev: -1 },
       insertText: (text, span) => available() && shell.actions.insertText(text, span),
       setDraft: text => { if (available()) shell.actions.setDraft(text) },
@@ -376,7 +378,7 @@ export class ProjectDraftRegistry implements SessionInputResolver {
   createDrafts(id: SessionId, files: readonly File[]): ReturnType<ConversationController['createDrafts']> {
     const prepared = this.prepareUploads(id, files)
     try {
-      const drafts = this.conversation().createDrafts(id, files)
+      const drafts = this.conversation().createDrafts(id, files, false)
       let index = 0
       for (const draft of drafts) {
         if (draft.kind !== 'file') continue

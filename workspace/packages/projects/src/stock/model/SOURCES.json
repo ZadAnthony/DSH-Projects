@@ -5,7 +5,7 @@
       "from": "packages/llm/llm-deepseek/src/adapter.ts",
       "to": "deepseek/adapter.ts",
       "stockSha256": "40aa0cc4730d9dc31c66e1e62e84dcaba787b4f6fa956fd6c2185f799bb538c7",
-      "localSha256": "d86f6f8c2d964d727471350bc18592868ea158b9beb53890b536fbdf6d88ff1d",
+      "localSha256": "aef481402337d0f690682a9422e231d4cba35ac99845ad205958b0fd8e234ca4",
       "previousOrigin": {
         "stockCommit": "639ed015397290b3745d163aafe02ffee4aa3f84",
         "stockSha256": "68d03fbaa3dd5f04a55ff48d7cd0f2ef125077f8144977459c15432e1464cf8f",
@@ -92,7 +92,7 @@
       "from": "packages/llm/llm-deepseek/src/replay.ts",
       "to": "deepseek/replay.ts",
       "stockSha256": "3edd01ffaedc422a148e1a66e8e93203ac07cb5aa558e35485501e564216f148",
-      "localSha256": "abecf98c133c3baa364019d9d32947c7349b712bd950c3fb8eb22131cc09234c"
+      "localSha256": "3d27057adabaf1258d3a9bd6592d1b3f6ce3fea12bed97b11364d43ff4609cf0"
     },
     {
       "from": "packages/llm/llm-deepseek/src/request-extensions.ts",
@@ -146,7 +146,7 @@
       "from": "packages/llm/llm-deepseek/src/transport.ts",
       "to": "deepseek/transport.ts",
       "stockSha256": "7d1f6ed8fe861ee71ba2d0c6a2a9e8512ddc1b6dc17d43a8795ab520a38746b6",
-      "localSha256": "8582e8618328d22692a8f1d5b907191f1b3c351d08cfec0627bba8d4ffa78264"
+      "localSha256": "796c77c3032d227919dabd3a787e095db2655aba2f5dda5c26503d6076a01be7"
     },
     {
       "from": "packages/llm/llm-deepseek/src/types.ts",
@@ -2759,11 +2759,11 @@
     },
     {
       "file": "runtime.ts",
-      "sha256": "72b5577369e7f028f74da4b5cd8b8ec024ddc93cb1dcf69ffeacccc985341c60"
+      "sha256": "3b7ea072b7023ba5751045ac2270bb2b0261ab0c8ef99ca5b91dfd3c194abd52"
     },
     {
       "file": "adapters.ts",
-      "sha256": "33acfa4a6d1bd2841a4198a3bacadd154fdef6f7afb4f97c9e0851cc627fcbfa"
+      "sha256": "bdcaec9d8608e51d813227e789115608758f7d5a8feca8ceb5b0cf95d9baa043"
     },
     {
       "file": "raw-usage.ts",
@@ -2771,7 +2771,7 @@
     },
     {
       "file": "deepseek/connections.ts",
-      "sha256": "2a8dbc681af9c5f5f4d1482d9391db747c28d61e43d58402aaefb334fea84178",
+      "sha256": "91af2eb7ed21a79d3a84da3e34d887f2c66823c5e66000cb5948426cc467e459",
       "adaptedFrom": [
         {
           "stockCommit": "1f81c047fc48fa190a683e469daa699857e9afe8",
@@ -2793,19 +2793,20 @@
     "license": "LICENSE.DSH"
   },
   "compatibilityTarget": {
-    "stockCommit": "1f81c047fc48fa190a683e469daa699857e9afe8",
-    "dshVersion": "0.2.1-rc.3",
+    "stockCommit": "38a6a5c965aa99ab525161efb7cc5cf1fe62fced",
+    "dshVersion": "0.2.2-rc.3",
     "migratedAlgorithms": [
       "DeepSeek exact-model connection and prepared-call catalog binding, version/capability admission, credential-scoped listing fallback and account model overrides",
       "Native ConfigureCall callback and imageRequestTarget dispatch",
-      "DeepSeek empty assistant serialization, explicit auxiliary reasoning control, timed-out stream unwind, and nonfatal extension acceptance"
+      "DeepSeek empty assistant serialization, explicit auxiliary reasoning control, timed-out stream unwind, and nonfatal extension acceptance",
+      "0.2.2-rc.3 ModelListingCache settings and changed callbacks with superseded-generation refresh retirement, model inventory event forwarding, current Cordis effectiveConfig capture, and provider-neutral failure reconstruction through LlmError.fromFailure"
     ],
     "preservedAlgorithms": [
       "DeepSeek raw usage capture retains missing versus zero and incomplete terminal usage",
       "Relative private Pi SDK remains 0.87.1 with its existing reporting patches and its original provenance; Pi 1.1 mid-conversation update and replay namespace additions are not claimed"
     ],
     "nativeCatalogDependencies": [
-      "@deepseek-ai/dsh-llm-deepseek ModelListingCache, requestModelListing, resolveListedCatalog, refuseListedModel; provided by original rc.3 host"
+      "@deepseek-ai/dsh-llm-deepseek 0.2.2-rc.3 ModelListingCache, requestModelListing, resolveListedCatalog, refuseListedModel; provided by the selected host"
     ]
   }
 }

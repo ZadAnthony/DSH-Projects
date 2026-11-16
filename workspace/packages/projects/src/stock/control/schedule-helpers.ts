@@ -28,11 +28,10 @@ export function sourceScheduleTaskAfterBoundary(task: ScheduleTask, boundaryAt: 
   const occurrence = isRecurringScheduleRecord(task.record)
     ? resolveRecurringOccurrence(task.record, instant(boundary)) : undefined
   const nextScheduledAt = occurrence?.nextScheduledAt
-  // rc.2's public task schema has no lifecycle non-delivery field. Preserve its
-  // receipts exactly; advancing a cursor is not a fabricated delivery receipt.
+  // 推进未接纳cursor不制造投递收据；实际历史保持原样。
   return {
     ...task,
-    status: nextScheduledAt === undefined ? 'inactive' : 'active',
+    status: nextScheduledAt === undefined ? 'ended' : 'active',
     record: { ...task.record, scheduledAt: nextScheduledAt ?? occurrence?.occurrenceAt ?? task.record.scheduledAt },
   }
 }
@@ -47,7 +46,7 @@ export async function prepareSourceScheduleRestore(
   const entries = [...tasks.entries()]
   assertIdentities(entries)
   for (const [key, task] of entries) {
-    if (!selected.has(task.sessionId)) continue
+    if (!targetsSelectedSession(task, selected)) continue
     const next = sourceScheduleTaskAfterBoundary(task, boundaryAt)
     if (next !== undefined) await tasks.put(key, next)
   }
@@ -63,7 +62,7 @@ export async function purgeScheduleRows(
     const tasks = domain.table('tasks')
     const entries = [...tasks.entries()]
     assertIdentities(entries)
-    const targets = entries.filter(([, task]) => selected.has(task.sessionId))
+    const targets = entries.filter(([, task]) => targetsSelectedSession(task, selected))
     result.alreadyAbsent = targets.length === 0
     for (const [key] of targets) {
       try { await tasks.delete(key); result.removed.push(key) }
@@ -71,7 +70,7 @@ export async function purgeScheduleRows(
     }
     const remaining = [...tasks.entries()]
     assertIdentities(remaining)
-    result.complete = result.failure === undefined && !remaining.some(([, task]) => selected.has(task.sessionId))
+    result.complete = result.failure === undefined && !remaining.some(([, task]) => targetsSelectedSession(task, selected))
     if (!result.complete) result.failure ??= 'schedule: selected rows remain after purge'
   } catch (error) { result.failure = joinFailure(result.failure, error) }
   return result
@@ -92,6 +91,12 @@ export async function purgeSessionSchedules(ctx: Context, dataRoot: string, sess
 function canonicalBoundary(value: string): string {
   if (new Date(instant(value)).toISOString() !== value) throw new Error('schedule: restore boundary must be a canonical UTC millisecond instant')
   return value
+}
+/** 只跟随真实当前接收目标；创建者及过去收据不决定未来投递。 */
+function targetsSelectedSession(task: ScheduleTask, selected: ReadonlySet<SessionId>): boolean {
+  return task.target.kind === 'new'
+    ? task.pendingDelivery !== undefined && selected.has(task.pendingDelivery.targetSessionId)
+    : selected.has(task.target.sessionId)
 }
 function assertIdentities(entries: readonly (readonly [string, ScheduleTask])[]): void {
   for (const [key, task] of entries) if (key !== task.record.id) throw new Error('schedule: stored task key differs from its record identity')

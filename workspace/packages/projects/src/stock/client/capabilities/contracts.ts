@@ -18,7 +18,7 @@ export type ProjectNativeUserQuestions = Pick<ClientRemote['userQuestions'], 'an
 export type ProjectNativeInteractionEvent = 'approval/request' | 'user-questions/request'
 export type ProjectNativeInteractionListener<E extends ProjectNativeInteractionEvent> = TypertClientEventListener<E>
 export type ProjectNativeRefreshEvent = 'commands/change' | 'agent-preset/selected'
-  | 'llm/adapters-updated' | 'settings/document-updated'
+  | 'llm/adapters-updated' | 'llm/models-updated' | 'settings/document-updated'
   | 'credentials/record-updated' | 'credentials/reference-updated'
 
 /** The Remote shim must dispatch interactions with the exact retained physical Session Context as `this`. */

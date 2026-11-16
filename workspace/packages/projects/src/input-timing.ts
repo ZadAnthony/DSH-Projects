@@ -9,7 +9,7 @@ interface InputTimingEntry {
   readonly acceptedAt?: number
   readonly claimedAt?: number
 }
-interface UserInputTimingState {
+export interface UserInputTimingState {
   readonly 'next-turn': readonly InputTimingEntry[]
   readonly 'next-step': readonly InputTimingEntry[]
   readonly current: readonly InputTimingEntry[]
@@ -17,10 +17,6 @@ interface UserInputTimingState {
   readonly removed: readonly InputTimingEntry[]
   readonly inTurn: boolean
 }
-declare module '@deepseek-ai/dsh-session-projection/types' {
-  interface SessionProjectionStateMap { 'projects/user-input-timing': UserInputTimingState }
-}
-
 const entry = z.object({ id: z.string(), user: z.boolean(), acceptedAt: z.number().int().optional(), claimedAt: z.number().int().optional() })
 export const userInputTimingProjectionDefinition = {
   key: 'projects/user-input-timing', stateVersion: 1,

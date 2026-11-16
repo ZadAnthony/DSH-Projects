@@ -30,6 +30,7 @@ import type { IConversation } from '@deepseek-ai/dsh-client-ui-conversation/clie
 import { ComposerBlockRegistry } from './input/blocks.ts'
 import type { ComposerBlock } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import { ProjectDraftRegistry, type ProjectDraftPorts } from '../../../draft/registry.ts'
+import { createComposerFileIntake } from './input/file-intake.ts'
 import { ComposerSubmissionPolicy } from './input/submission-policy.ts'
 import { queueDockEntry } from './queue/QueueDock.tsx'
 import { EnterBehaviorRow } from './settings/EnterBehaviorRow.tsx'
@@ -312,6 +313,7 @@ export function applyProjectConversation(ctx: Context, config: Config = Config({
       'conversation.composer': { kind: 'chain', scope: 'session' },
       'conversation.composer.bar': { kind: 'single', scope: 'session-maybe' },
       'conversation.input.dock': { kind: 'list', scope: 'session' },
+      'conversation.hero.frame': { kind: 'hoc', scope: 'root' },
       'conversation.hero.brand.mark': { kind: 'single', scope: 'root' },
       'conversation.hero.workspace': { kind: 'single', scope: 'root' },
       'conversation.hero.agentPreset': { kind: 'single', scope: 'session-maybe' },
@@ -401,6 +403,7 @@ export function applyProjectConversation(ctx: Context, config: Config = Config({
     }),
   }, ConversationSessionHeader)
 
+  const fileIntake = createComposerFileIntake()
   const registerComposerBar = () => slots.register({
     name: 'conversation.composer.bar',
     locale: NS,
@@ -418,6 +421,8 @@ export function applyProjectConversation(ctx: Context, config: Config = Config({
     inject: (sessionId: SessionId | undefined): ComposerBarInjected => {
       if (sessionId === undefined) {
         return {
+          registerFileIntake: fileIntake,
+          retry: undefined,
           keyboard: undefined,
           addFiles: undefined,
           removeAttachment: undefined,
@@ -440,12 +445,14 @@ export function applyProjectConversation(ctx: Context, config: Config = Config({
       const inputTriggers = inputHub.inputTriggers(sessionId)
       const bridge = hostPathBridge()
       return {
+        registerFileIntake: fileIntake,
+        retry: undefined,
         keyboard: shell,
         addFiles: (files, directories = new Set()) => {
           if (sessions.binding(sessionId) === undefined) return t('file.sessionUnavailable')
           try { inputHub.assertBindingCurrent(sessionId) }
           catch (error) { return error instanceof Error ? error.message : String(error) }
-          if (shell.snapshot.phase === 'adjudicating' || shell.snapshot.phase === 'submitting') {
+          if (shell.snapshot.phase === 'adjudicating' || shell.snapshot.phase === 'submitting' || shell.snapshot.phase === 'sending') {
             return t('attachment.dropBlocked')
           }
           const uploads: File[] = []

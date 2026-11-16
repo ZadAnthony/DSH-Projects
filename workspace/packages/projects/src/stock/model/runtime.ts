@@ -48,6 +48,7 @@ export class ProjectsLlmRuntime extends LlmRuntime {
   constructor(ctx: Context, readonly host: ProjectsModelHostPort) {
     super(ctx)
     if (host.subscribe !== undefined) ctx.effect(() => host.subscribe!(() => ctx.emit('llm/adapters-updated')))
+    if (host.subscribeModelChanges !== undefined) ctx.effect(() => host.subscribeModelChanges!(provider => ctx.emit('llm/models-updated', provider)))
     ctx.effect(() => () => this.close(), 'projects.model-gateway')
   }
 
@@ -57,7 +58,7 @@ export class ProjectsLlmRuntime extends LlmRuntime {
     const key = snapshot.family === 'pi-ai' ? 'pi-ai' : `${snapshot.family}:${provider}`
     const prior = this.managed.get(key)
     if (prior?.generation === snapshot.generation) return snapshot
-    const bound = createProjectsBoundAdapter(this.ctx, snapshot)
+    const bound = createProjectsBoundAdapter(this.ctx, snapshot, () => this.host.captureProvider?.(snapshot.route)?.generation === snapshot.generation)
     if (!bound.routes.includes(provider)) throw new Error(`PROJECT_MODEL_ROUTE_UNAVAILABLE: ${provider}`)
     if (prior === undefined) {
       const wrapper = new GenerationAdapter(bound)

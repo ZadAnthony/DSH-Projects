@@ -1,5 +1,6 @@
 /** Read-only Project identity, provenance, and native-file access for core adapters. */
 
+import type {} from '@deepseek-ai/dsh-tool-executor-ptc/types'
 import { isAbsolute, join } from 'node:path'
 
 import type { Context } from '@deepseek-ai/cordis'
@@ -282,7 +283,7 @@ export class ProjectsCoreAccess {
       throw coreError(`${toolName} Project session binding changed during invocation`, 'PROJECT_CORE_MISSING_SESSION')
     }
 
-    const boundary = this.ctx.sessionProjections.stateOf(agent.session, 'turnBoundary')
+    const boundary = this.ctx.agents.turnBoundaryOf(agent.session)
     if (boundary === undefined || boundary.openTurnStartSeq === null) {
       throw coreError(`${toolName} requires an open Project turn`, 'PROJECT_CORE_TOOL_CONTEXT_UNAVAILABLE')
     }
@@ -485,7 +486,7 @@ export class ProjectsCoreAccess {
     }
     if (info?.type !== 'directory') throw coreError('项目文件目录不存在或不是目录。', 'PROJECT_CORE_FILE_SCOPE_UNAVAILABLE')
     // 读取实际服务提供者的已校验配置，避免另一份目录上限与宿主配置分叉。
-    const config: unknown = this.ctx.reflect._getImpl('workspaceFiles')?.fiber.config
+    const config: unknown = this.ctx.reflect._getImpl('workspaceFiles')?.ctx.fiber.config
     const limit = typeof config === 'object' && config !== null && 'maxEntries' in config ? config.maxEntries : undefined
     if (typeof limit !== 'number' || !Number.isSafeInteger(limit) || limit < 1) {
       throw coreError('宿主目录读取上限当前不可得。', 'PROJECT_CORE_FILE_SCOPE_UNAVAILABLE')

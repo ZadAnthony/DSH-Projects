@@ -1,11 +1,13 @@
 /** Business data for Chat process groups; source Nodes remain in the Chat store. */
 export type ProcessActivity = 'read' | 'readImage' | 'search' | 'write' | 'edit' | 'commands' | 'code'
-  | 'webSearch' | 'webFetch' | 'subagents' | 'plan' | 'questions' | 'tools'
+  | 'webSearch' | 'webFetch' | 'subagents' | 'plan' | 'questions' | 'tools' | 'context'
+
+export type RunningProcessActivity = Exclude<ProcessActivity, 'context'>
 
 /** Distinct-call category ranking and the current live task detail. */
 export interface ProcessActivitySummary {
   readonly counts: readonly { readonly kind: ProcessActivity; readonly count: number }[]
-  readonly running: ProcessActivity | undefined
+  readonly running: Exclude<ProcessActivity, 'context'> | undefined
   readonly runningDetail: string
   /** Present only while the selected live activity has not reached tool/call. */
   readonly preparing?: true

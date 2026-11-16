@@ -44,7 +44,7 @@ export type InputBarProps = ComposerBarProps
 
 export const InputBar = memo(function InputBar({
   useSession, useInput, inputActions, keyboard, addFiles, removeAttachment, resolveDraftAttachments,
-  retryFileUpload,
+  retryFileUpload, registerFileIntake, occurrence,
   toggleCommandMenu, stop, t,
   renderSlot, useBusyEnter, useFileUploads, useNotices, useLexicon, useMenuLauncher, useStopShortcut,
   useProjection, sessionId, variant, disabled: inert = false, blocked,
@@ -127,23 +127,23 @@ export const InputBar = memo(function InputBar({
   }, [])
   const cardRef = useRef<HTMLDivElement | null>(null)
   const scrollRef = useRef<HTMLDivElement | null>(null)
+  const intakeRef = useRef<{ accepts(): boolean; add(files: readonly File[], directories?: ReadonlySet<File>): void }>({ accepts: () => false, add: (_files: readonly File[], _directories?: ReadonlySet<File>) => {} })
+  useEffect(() => {
+    const card = cardRef.current
+    if (card === null) return
+    return registerFileIntake({ card, occurrence, accepts: () => intakeRef.current.accepts(), add: (files, directories) => intakeRef.current.add(files, directories) })
+  }, [registerFileIntake, occurrence])
 
-  // A continuable child without its live parent cannot accept human input,
-  // but its independent Stop below stays available while it runs.
   const continuable = subagent?.address.mode === 'continuable'
-  const parentOffline = continuable && subagent.parentAvailable !== true
-  // Running input stays free; locked = session removed, the
-  // inert no-workspace state, the machine faces absent (no session), or a
-  // parent-offline continuable child. An owner block also disables input;
-  // adjudicating and submitting render read-only so the draft stays visible.
-  const disabled = removed || inert || !live || blocked !== undefined || parentOffline
+  const sending = input?.phase === 'sending'
+  const disabled = removed || inert || !live || blocked !== undefined
   const locked = disabled
   // The model seat is the ONE control a block leaves live: every block this
   // contract has is cleared by choosing a model, so locking it too would leave
   // the composer asking for the only thing it prevents. The other reasons to
   // be disabled do lock it — there is no session to choose a model for.
   const modelSeatLocked = removed || inert || !live
-  const machineBusy = input?.phase === 'adjudicating' || input?.phase === 'submitting'
+  const machineBusy = input?.phase === 'adjudicating' || input?.phase === 'submitting' || input?.phase === 'sending'
   // The no-workspace surface remains the resident DOM node but acts as the
   // existing picker trigger. Message controls stay locked until a Session
   // exists; the trigger itself is read-only rather than disabled so pointer
@@ -233,6 +233,7 @@ export const InputBar = memo(function InputBar({
   }, [subagent, addFiles, attachments, imageLimits, showToast, t])
 
   const canAcceptDrop = subagent === null && !locked && !machineBusy && addFiles !== undefined
+  intakeRef.current = { accepts: () => canAcceptDrop, add: intakeFiles }
 
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const onPickFiles = (e: ChangeEvent<HTMLInputElement>): void => {
@@ -300,14 +301,15 @@ export const InputBar = memo(function InputBar({
   // describes a delivery the click cannot or does not perform; every other
   // state keeps plain Send. A continuable child keeps Send primary and
   // exposes Stop independently.
-  const primaryStops = running && subagent === null && (empty || blocked !== undefined)
+  const primaryStops = running && subagent === null && !sending && (empty || blocked !== undefined)
   // Disabled native buttons may omit mouseleave; their tooltip must close from state.
   const primaryDisabled = primaryStops ? stop === undefined : empty || disabled || machineBusy || uploadsPending
-  const interruptible = running && continuable
+  const interruptible = running && (continuable || (sending && subagent === null))
   const primarySubmitMode = resolveSubmitMode(busyEnter, running, 'enter', steeringAvailable)
   const plainMessageDraft = !empty && input?.phase === 'plain' && !draft.trimStart().startsWith('/')
   const primaryLabel = primaryStops
     ? t('input.stop')
+    : sending ? t('input.sending')
     : running && steeringAvailable && !disabled && !uploadsPending && plainMessageDraft
       ? t(primarySubmitMode === 'steer' ? 'input.send.steer' : 'input.send.queue')
       : t('input.send')
@@ -340,9 +342,7 @@ export const InputBar = memo(function InputBar({
     return translated !== hintKey ? translated : rawHint
   })()
 
-  const placeholderText = placeholder ?? (parentOffline
-    ? t('placeholder.parentOffline')
-    : disabled
+  const placeholderText = placeholder ?? (disabled
       ? t('placeholder.unavailable')
       // The steer hint deliberately outranks the plan placeholder:
       // while it shows, the whole-queue gesture is genuinely available
@@ -390,6 +390,7 @@ export const InputBar = memo(function InputBar({
           onRemoveAttachment: (id) => { removeAttachment?.(id) },
           uploads,
           onRetryFile: (id) => { retryFileUpload?.(id) },
+          uploadFailureText: reason => attachmentErrorText(t, reason, imageLimits),
           dropLimits: imageLimits === undefined ? undefined : {
             count: imageLimits.maxImagesPerMessage,
             size: imageSizeText(imageLimits.maxImageBytes),
@@ -478,6 +479,8 @@ export const InputBar = memo(function InputBar({
                 type="button"
                 className={css.primary}
                 aria-label={primaryLabel}
+                aria-busy={sending || undefined}
+                data-sending={sending ? '' : undefined}
                 disabled={primaryDisabled}
                 onMouseDown={keepFocus}
                 onClick={onPrimary}
@@ -485,6 +488,11 @@ export const InputBar = memo(function InputBar({
                 {primaryStops ? (
                   <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden>
                     <rect x="3" y="3" width="10" height="10" rx="3" fill="currentColor" />
+                  </svg>
+                ) : sending ? (
+                  <svg className={css.sendingSpinner} viewBox="0 0 16 16" width="16" height="16" aria-hidden>
+                    <circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" strokeOpacity="0.35" strokeWidth="2" />
+                    <path d="M8 2a6 6 0 0 1 6 6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
                   </svg>
                 ) : (
                   <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden>

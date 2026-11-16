@@ -70,7 +70,7 @@ export function captureProjectsNativeFoundations(root: Context): ProjectsNativeF
 }
 
 class ProjectsFoundationTree extends EntryTree {
-  override write(): void {}
+  override commit(): void {}
 }
 
 export interface InstalledProjectsNativeFoundations {
@@ -165,6 +165,13 @@ export async function installProjectsNativeFoundations(
   return {
     modules: options.snapshot.declarations.map(declaration => declaration.row.name),
     async ready() {
+      // Foundation declarations retain individual resolution bases, but their
+      // dependencies form one graph. Drain that graph before auditing any leaf.
+      while (true) {
+        const tasks = trees.flatMap(tree => tree.getTasks())
+        if (tasks.length === 0) break
+        await Promise.allSettled(tasks)
+      }
       const diagnostics = await Promise.all(trees.map(tree => auditRows(tree)))
       const failures = diagnostics.flatMap(audit => [...audit.failed, ...audit.pending])
       if (failures.length > 0) throw new Error(`PROJECT_FOUNDATION_NOT_READY:\n${failures.join('\n')}`)
@@ -197,7 +204,7 @@ export async function installProjectsNativeFoundations(
         if (name === '@deepseek-ai/dsh-storage-json') next = { ...(next as object), root: join(options.dataRoot, 'native-storage') }
         if (name === '@deepseek-ai/dsh-spill-local') next = { ...(next as object), root: join(options.dataRoot, 'native-spills') }
         const candidate = resolveConfig(fiber.runtime, interpolate(record.entry.ctx, next))
-        if (JSON.stringify(constructorConfiguration(fiber.config)) !== JSON.stringify(constructorConfiguration(candidate))) {
+        if (JSON.stringify(constructorConfiguration(fiber.effectiveConfig)) !== JSON.stringify(constructorConfiguration(candidate))) {
           throw new Error(`PROJECT_RUNTIME_CONFIGURATION_REQUIRES_RELOAD: ${name} changed a constructor-owned field; only native Volatile values can update in place`)
         }
         updates.push({ entry: record.entry, previous: copyPresetDeclaration(record.entry.options.config), next })

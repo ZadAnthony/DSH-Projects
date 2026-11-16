@@ -1,7 +1,6 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
 import { randomUUID } from 'node:crypto'
-import { createRequire } from 'node:module'
-import ToolRuntime, { TOOL_RUNTIME_SCHEDULER, ToolArgsError, validateJsonSchemaValue, type JsonSchemaNode, type ToolDefinition, type ToolExecution, type ToolExecutionToken, type ToolRunContext } from '@deepseek-ai/dsh-tools'
+import ToolsService, { ToolArgsError, validateJsonSchemaValue, type JsonSchemaNode, type ToolDefinition, type ToolExecution, type ToolExecutionToken, type ToolRunContext, type ResolvedToolSet } from '@deepseek-ai/dsh-tools'
 import type { Context } from '@deepseek-ai/cordis'
 import type { ScopeKey } from '@deepseek-ai/dsh-scope'
 import type { Agent } from '@deepseek-ai/dsh-agent'
@@ -21,6 +20,7 @@ interface Invocation extends Binding {
 }
 const scheduled = new AsyncLocalStorage<Binding>()
 const activeBody = new AsyncLocalStorage<Invocation>()
+const activeOutput = new AsyncLocalStorage<{ exec: Readonly<ToolExecution>; invocation: Invocation }>()
 const invocations = new Map<ToolExecutionToken, Invocation>()
 const invocationSources = new WeakMap<object, ToolInvocationSource>()
 
@@ -84,15 +84,11 @@ function requireInvocation(exec: Readonly<ToolExecution>): Invocation {
   return invocation
 }
 
-/** Native pipeline and PTC remain native; only public definitions and hooks are decorated. */
-export class ProjectToolRuntime extends ToolRuntime {
+/** The registry decorates executable definitions; scheduling belongs to scoped executors. */
+export class ProjectToolRuntime extends ToolsService {
   private readonly bodyCancellations = new WeakMap<object, string>()
-  constructor(ctx: Context, config: ConstructorParameters<typeof ToolRuntime>[1] = {}) {
-    super(ctx, config)
-    const manifest: { version?: string } = createRequire(import.meta.url)('@deepseek-ai/dsh-tools/package.json')
-    if (!['0.2.0-rc.2', '0.2.1-rc.3', '0.2.1-rc.5'].includes(manifest.version ?? '')) throw new Error(`Unsupported native Tools scheduler ABI: ${manifest.version ?? 'unknown'}`)
-    const scheduler = this[TOOL_RUNTIME_SCHEDULER]
-    if (!scheduler || ['prepare', 'dispatch', 'finalize', 'finish'].some(key => typeof scheduler[key as keyof typeof scheduler] !== 'function')) throw new Error('Unsupported native Tools scheduler ABI: required pinned scheduler operations are absent')
+  constructor(ctx: Context) {
+    super(ctx)
     ctx.on('session/event', (session, event) => {
       if (event.type !== 'tool/ptc-dispatch-start') return
       const parent = activeBody.getStore()
@@ -106,6 +102,12 @@ export class ProjectToolRuntime extends ToolRuntime {
       // Binding runs synchronously before native policy's first await.
       bindProjectToolToken(exec)
       return next()
+    })
+    ctx.on('tools/execute', (exec, next) => {
+      // The transport definition is shared across Agents. Output rendering
+      // belongs to this actual dispatch, never to a mutable definition closure.
+      const invocation = requireInvocation(exec)
+      return activeOutput.run({ exec, invocation }, next)
     })
     this.guard(exec => {
       if (!exec.agent) return undefined
@@ -128,16 +130,19 @@ export class ProjectToolRuntime extends ToolRuntime {
       } finally { releaseProjectToolToken(exec.token) }
     })
   }
-  override get(name: string, scope?: ScopeKey): ToolDefinition | undefined {
-    const definition = super.get(name, scope)
-    if (!definition) return undefined
-    let body: { exec: ToolRunContext; invocation: Invocation } | undefined
+  override executable(name: string, scope?: ScopeKey, toolSet?: ResolvedToolSet): ToolDefinition | undefined {
+    const definition = super.executable(name, scope, toolSet)
+    return definition === undefined ? undefined : this.decorate(definition)
+  }
+  /** Also decorates executor-owned transport definitions outside the registry. */
+  decorate(definition: ToolDefinition): ToolDefinition {
     return {
       ...definition,
       output: {
         ...definition.output,
         render: (args, value) => {
           const content = definition.output.render(args, value)
+          const body = activeOutput.getStore()
           if (body) appendProjectRecording(body.invocation.agent.session, body.invocation.persistence, 'projects/tool-execution-return', {
             ...identity(body.exec, body.invocation), phase: 'rendered', origin: 'body', value, content,
           })
@@ -145,6 +150,7 @@ export class ProjectToolRuntime extends ToolRuntime {
         },
         ...definition.output.presentationMeta ? { presentationMeta: (args: unknown, value: JsonValue) => {
           const meta = definition.output.presentationMeta!(args, value)
+          const body = activeOutput.getStore()
           if (body) appendProjectRecording(body.invocation.agent.session, body.invocation.persistence, 'projects/tool-execution-return', {
             ...identity(body.exec, body.invocation), phase: 'presentation-meta', origin: 'body', meta,
           })
@@ -176,7 +182,6 @@ export class ProjectToolRuntime extends ToolRuntime {
         // argument is never recorded as actual user body entry.
         const violations = validateJsonSchemaValue(definition.parameters as JsonSchemaNode, args, '')
         if (violations.length > 0) throw new ToolArgsError(violations)
-        body = { exec, invocation }
         const { agent, persistence } = invocation
         const fact = identity(exec, invocation)
         appendProjectRecording(agent.session, persistence, 'projects/tool-execution-start', { ...fact, arguments: snapshot(args) })

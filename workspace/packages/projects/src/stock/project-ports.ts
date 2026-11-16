@@ -10,6 +10,7 @@ import type { ProjectsDeletionV1Scope } from '../deletion-v1.ts'
 import type { MessageId } from '@deepseek-ai/dsh-llm'
 import type { OwnedSubagentMember, OwnedQuiescence, OwnedRetirement, OwnedRetirementOptions, ProjectAbsentCarrierProof } from './control/identity.ts'
 import type { ProjectPaths } from './project-paths.ts'
+import type { UserInputTimingState } from '../input-timing.ts'
 
 export interface ProjectSourceExecutionDisposition {
   readonly state: 'active' | 'readonly' | 'unknown'
@@ -71,6 +72,7 @@ export interface ProjectsRuntimePorts {
   readonly read: ProjectReadPort
   readonly invocations: ProjectInvocationPort
   readonly recording: ProjectRecordingPort
+  readonly inputTiming: { stateOf(session: Session): UserInputTimingState }
 }
 export interface ProjectsRuntimeComposition {
   readonly paths: ProjectPaths

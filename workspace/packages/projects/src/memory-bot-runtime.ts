@@ -1,9 +1,10 @@
+import { ProjectNativeToolExecutor } from './stock/tools/index.ts'
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import { SessionId, SessionLogOffset } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-system-prompt'
-import { defineTool, type ToolExecution, type ToolExecutionResult, type ToolRunContext } from '@deepseek-ai/dsh-tools'
+import { defineTool, type ToolDefinition, type ToolExecution, type ToolExecutionResult, type ToolRunContext } from '@deepseek-ai/dsh-tools'
 import type { JsonValue } from '@deepseek-ai/dsh-util-values'
 import type { ProjectsCoreAccess } from './core-access.ts'
 import { ProjectMemoryBatchOwner } from './memory-bot/index.ts'
@@ -38,6 +39,14 @@ declare module '@deepseek-ai/dsh-llm' {
 const RESULT_TOOL = 'project_memory_batch_result'
 /** 同一个集合同时约束实际执行与最终模型schema；late own-layer注册不能扩权。 */
 const BOT_TOOLS = new Set(['project_memory_list', 'project_memory_read', 'project_memory_source', 'project_memory_save', 'project_memory_withdraw', RESULT_TOOL])
+
+/** rc.3把可调用声明交给executor；执行限制继续由同一限定集合约束。 */
+class MemoryBotToolExecutor extends ProjectNativeToolExecutor {
+  constructor(ctx: Context, private readonly allowed: ReadonlySet<string>) { super(ctx) }
+  override describe(tools: readonly ToolDefinition[]) {
+    return super.describe(tools.filter(tool => this.allowed.has(tool.name)))
+  }
+}
 
 interface BatchDeclaration {
   status: 'complete' | 'no-change' | 'unresolved'
@@ -233,11 +242,7 @@ export class ProjectMemoryRuntime {
         active.calls.set(exec.token, exec)
         return undefined
       }))
-      disposers.push(agent.ctx.tools.presentAs('native'))
-      disposers.push(agent.ctx.on('system-prompt/assemble', async (_assembly, context, next) => {
-        const assembly = await next()
-        return context.agent !== agent ? assembly : { ...assembly, tools: assembly.tools.filter(tool => tools.has(tool.name)) }
-      }))
+      disposers.push(agent.ctx.tools.setExecutor(new MemoryBotToolExecutor(agent.ctx, tools)))
       disposers.push(onProjectRequestPrepare(agent, async (payload, previous) => {
         const active = slot.active
         if (active === undefined) throw new Error('Memory Bot没有可派发的实际批次。')
@@ -289,7 +294,8 @@ export class ProjectMemoryRuntime {
     const agent = await this.ports.ensureBot(projectId)
     const slot = this.bots.get(String(agent.id))
     if (slot?.agent !== agent || slot.membership.project.id !== projectId || slot.membership.session.role !== 'memory') throw new Error('真实Memory Bot未安装或项目归属不一致。')
-    if (!agent.options.provider || !agent.options.model) throw new Error('Memory Bot缺少明确模型route，不能使用默认fallback。')
+    const selection = agent.model.current()
+    if (!selection?.provider || !selection.model) throw new Error('Memory Bot缺少明确模型route，不能使用默认fallback。')
     return agent
   }
 

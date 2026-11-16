@@ -8,7 +8,7 @@ import type { Agent } from '@deepseek-ai/dsh-agent'
 import { interpolate } from '@deepseek-ai/cordis-plugin-loader'
 import { installProjectAgentFactory, type ProjectAgentFactory, type ProjectAgentFactoryOptions } from './agent/index.ts'
 import ProjectSessionPersistence from './persistence/index.ts'
-import ProjectToolRuntime from './tools/index.ts'
+import ProjectToolRuntime, { ProjectNativeToolExecutor } from './tools/index.ts'
 import { createProjectsHostPorts, installProjectsReadOnlyHostCapabilities, ProjectsLlmRuntime, type ProjectsHostPorts } from './host-ports.ts'
 import { ProjectsPresetLoader, type InstalledProjectsPreset } from './presets/loader.ts'
 import { ProjectsAgentPresetRegistry, type ProjectsPresetPublication, type ProjectsPresetRequestLease } from './presets/revisions.ts'
@@ -96,7 +96,7 @@ export async function createProjectsRuntimeGraph(
   const dedicatedAgents = new WeakSet<Agent>()
   const registry = () => ctx.agentPresets as ProjectsAgentPresetRegistry
 
-  const selectedPreset = (agent: Agent): string | undefined => ctx.sessionProjections.stateOf(agent.session, 'agentPreset') ?? undefined
+  const selectedPreset = (agent: Agent): string | undefined => registry().presetForSession(agent.session) ?? undefined
   const refreshConfiguration = (presetId?: string): Promise<ProjectsPresetPublication> => {
     const operation = refreshTail.then(async (): Promise<ProjectsPresetPublication> => {
       if (state !== 'ready') throw new Error(`PROJECT_NOT_READY: Projects runtime graph is ${state}`)
@@ -184,7 +184,10 @@ export async function createProjectsRuntimeGraph(
       ctx.plugin(ProjectToolRuntime, effectiveRuntimeConfiguration.tools),
       ctx.plugin(ProjectsAgentPresetRegistry, { default: snapshot.presetId }),
     ]
-    await Promise.all(fibers.map(fiber => fiber.await()))
+    // All providers are registered first. Await their dependency order because
+    // Cordis await() on a still-pending dependent can finish before it starts.
+    for (const fiber of fibers) await fiber.await()
+    ctx.tools.setExecutor(new ProjectNativeToolExecutor(ctx))
     assertStarting()
     for (const service of ['loader', 'typert', 'sessionProjections', 'sessionPersistence', 'sessions', 'agents', 'systemPrompt', 'llm', 'tools', 'agentPresets']) {
       if (ctx.get(service) === undefined) throw new Error(`PROJECT_NOT_READY: private provider ${service} is unavailable`)

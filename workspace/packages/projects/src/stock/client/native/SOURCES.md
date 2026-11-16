@@ -14,3 +14,7 @@ Common dictionary pair: `packages/client/locale/src/locales/{en,zh}.ts`, same co
 The `session.ts` child-prompt request-id preservation fix is adapted from the same upstream path at `1f81c047fc48fa190a683e469daa699857e9afe8` (DSH 0.2.1-rc.3). Its remaining original object-layer implementation retains the rc.2 provenance above; this is not a wholesale replacement of the source record.
 
 Local receipt adaptation: a native `user/message` hands its identified submission echo to Chat immediately, while retaining the original settlement until the Inbox projection acknowledges the claim. This prevents a lagging control projection from continuing to label consumed input as sending; attachment retirement and transport errors retain their existing owners.
+
+
+DSH 0.2.2-rc.3 contract adaptation (`38a6a5c965aa99ab525161efb7cc5cf1fe62fced`): `session.ts` adopts acceptance-triggered echoes and `onAccept`, full image references, current child prompt/Stop requests, and prepared-history consumption/status fields from the same upstream source path. Projects' exact carrier routing, durable Inbox handoff and shared resync/dispose teardown remain local responsibilities. The old parent-availability display state is retired; child writes still require the captured Projects root proof.
+`when-allowed.ts` is copied from `packages/api/remote-access/src/client/when-allowed.ts` at that current commit, MIT. It owns the effects of only the explicitly mapped private child input affordances; global/root endpoint access stays unavailable.

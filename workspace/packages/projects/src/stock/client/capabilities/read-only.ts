@@ -4,6 +4,8 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { SessionRemote } from '@deepseek-ai/dsh-api-session-controller/client'
 import { apply as applyResources } from '@deepseek-ai/dsh-client-resources/client'
 import { apply as applyPlan } from '@deepseek-ai/dsh-client-ui-plan/client'
+import { apply as applyContextMenus } from '@deepseek-ai/dsh-client-ui-context-menu/client'
+import { ProjectScopedShortcuts } from './shortcuts.ts'
 import { ProjectPlanNavigation } from './plan-navigation.tsx'
 import { installProjectPresentedFiles, type ProjectPresentedFilesPorts } from './deliverables/index.ts'
 import { installProjectChangedFiles, type ProjectChangedFilesPorts } from './changes/index.ts'
@@ -30,6 +32,9 @@ export async function installProjectReadOnlyNativePresentations(ctx: Context, po
   const remote = ctx.get('remote')
   if (remote === undefined) throw new Error('Projects native Plan reader requires private Remote host facts')
   if (ctx.get('resources') === undefined) applyResources(ctx)
+  // Reader也要提供原生组件读取的真实菜单/快捷键目录；不挂载键盘监听。
+  if (ctx.get('shortcuts') === undefined) ctx.provide('shortcuts', new ProjectScopedShortcuts(ctx))
+  if (ctx.get('contextMenus') === undefined) applyContextMenus(ctx)
   let ownedNavigation: ProjectPlanNavigation | undefined
   const navigation = ports.planNavigation ?? (ownedNavigation = new ProjectPlanNavigation(ctx, ports.openResourceFallback))
   if (ctx.get('sidebarRight') === undefined) ctx.provide('sidebarRight', navigation.sidebarRight)

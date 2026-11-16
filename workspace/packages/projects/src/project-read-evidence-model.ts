@@ -1,4 +1,5 @@
 /** Per-surface, disposable read provenance folded from acknowledged canonical positions. */
+import type {} from '@deepseek-ai/dsh-tool-executor-ptc/types'
 import type { MessageId } from '@deepseek-ai/dsh-llm'
 import type { SessionEvent, SessionId } from '@deepseek-ai/dsh-session'
 import { nativeSourceDigest } from './native-source-host.ts'

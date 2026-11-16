@@ -5,6 +5,7 @@ import { apply as applyUiSession } from '@deepseek-ai/dsh-client-ui-session/clie
 import { UiConversation } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import { apply as applyTools } from '@deepseek-ai/dsh-client-ui-tool/client'
 import { apply as applyAttachments } from '@deepseek-ai/dsh-client-ui-attachment/client'
+import { apply as applyFileDrag } from '@deepseek-ai/dsh-client-ui-file-drag/client'
 import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { ClientRemote, RemoteHostFacts } from '@deepseek-ai/dsh-api-gateway/client'
@@ -132,6 +133,7 @@ export class ProjectReadDomain {
     ctx.effect(() => acquireProjectsLocale(locale), 'Projects Reader dictionaries')
     if (options.language !== undefined) locale.setLocale(options.language)
     ctx.provide('locale', locale); ctx.slots.installLocale(locale)
+    applyFileDrag(ctx)
     this.sessions = new ProjectReadSessions(ctx, options.remote, options.connection, options.host)
     ctx.effect(() => () => this.sessions.dispose(), 'Projects read Session owners')
     applyUiSession(ctx)

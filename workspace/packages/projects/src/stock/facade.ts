@@ -33,6 +33,7 @@ import { ProjectsRuntime, type ProjectsRuntimeOptions } from '../runtime.ts'
 import { createProjectPaths, type ProjectPaths } from './project-paths.ts'
 import { installProjectsReadPort, type ProjectReadPort } from './read/index.ts'
 import { projectInvocationPort } from './tools/runtime.ts'
+import { ProjectsNativeToolExecutorPlugin, ProjectsPtcExecutorPlugin } from './tools/index.ts'
 import { createProjectRecordingPort } from './recording/index.ts'
 import { ProjectOwnedControl } from './control/index.ts'
 import { createOwnedProjectTitles } from './control/titles.ts'
@@ -169,6 +170,8 @@ export class ProjectsFacade {
         ['@deepseek-ai/dsh-workflow-ptc', capabilities.Workflow],
         ['@deepseek-ai/dsh-compaction-basic', ProjectsCompactionEngine],
         ['@deepseek-ai/dsh-session-title', createOwnedProjectTitles(ownership)],
+        ['@deepseek-ai/dsh-tool-executor-native', ProjectsNativeToolExecutorPlugin],
+        ['@deepseek-ai/dsh-tool-executor-ptc', ProjectsPtcExecutorPlugin],
       ])
       const snapshot = this.options.foundationSnapshot ?? captureProjectsNativeFoundations(this.root)
       this.graph = await createProjectsRuntimeGraph(this.root, {
@@ -260,6 +263,7 @@ export class ProjectsFacade {
             }) : undefined),
             composition: { paths: this.paths, store: this.store, ports: {
               control: this.control, read: this.read, invocations: projectInvocationPort, recording: createProjectRecordingPort(),
+              inputTiming: { stateOf: session => this.requireGraph().factory.userInputTiming(session) },
             } },
             creation: {
               create: (request, signal) => this.createOwned(request, signal),

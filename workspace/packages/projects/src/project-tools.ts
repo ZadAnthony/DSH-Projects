@@ -2,7 +2,6 @@
 import type { Agent } from '@deepseek-ai/dsh-agent';
 import { defineTool, ToolArgsError, validateJsonSchemaValue } from '@deepseek-ai/dsh-tools';
 import type { ObjectJsonSchema, ToolDefinition, ToolExecution, ToolRunContext } from '@deepseek-ai/dsh-tools';
-import type {} from '@deepseek-ai/dsh-tools/types';
 import type { JsonValue } from '@deepseek-ai/dsh-util-values';
 import type { ContentBlock } from '@deepseek-ai/dsh-llm/types';
 import { renderProjectHistoryContentPage, PROJECT_HISTORY_DEFAULT_LIMIT, PROJECT_HISTORY_LIMIT_MAX, PROJECT_HISTORY_CONTEXT_MAX, PROJECT_HISTORY_RECORD_VERSIONS } from './project-history.ts';

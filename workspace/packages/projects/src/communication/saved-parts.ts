@@ -1,4 +1,5 @@
 /** One catalogue for saved read values, visible blocks and exact reusable sources. */
+import type {} from '@deepseek-ai/dsh-tool-executor-ptc/types'
 import { isAppendSurfaceEvent } from '@deepseek-ai/dsh-session/surface'
 import type { RetainedNativePrefix } from '../source-reader.ts'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'

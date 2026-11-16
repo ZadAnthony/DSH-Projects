@@ -1,5 +1,7 @@
 import { currentProjectDispatchCapture } from '../stock/request/records.ts'
 import { installBotCompaction } from '../stock/request/bot-compaction.ts'
+import { ProjectNativeToolExecutor } from '../stock/tools/index.ts'
+import type { ToolDefinition } from '@deepseek-ai/dsh-tools'
 /** One finite evaluation on a real, isolated session-manager Agent. */
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
@@ -23,6 +25,15 @@ import { isMainBusinessInput } from './business-input.ts'
 import { visibleSourceItemText } from '../model-visible-content.ts'
 import { deliveredManagerSources, managerReadDelivery, ManagerHistoryResultPages, parseSessionManagerDecision, SessionManagerEvaluationError } from './manager-parser.ts'
 import { installMainManagerTools, MAIN_SESSION_MANAGER_TOOLS, type MainManagerContextPorts, type MainManagerHistoryReader, type MainManagerObservations } from './manager-tools.ts'
+
+/** 工具声明由executor持有；presentation waterfall不再有权改写Schema。 */
+class MainManagerToolExecutor extends ProjectNativeToolExecutor {
+  override describe(tools: readonly ToolDefinition[]) {
+    return super.describe(tools.filter(tool => MAIN_SESSION_MANAGER_TOOLS.has(tool.name)).map(tool => tool.name === 'project_history'
+      ? { ...tool, description: '本会话管理评估仅可读取绑定的稳定主会话及其合法历史carrier，不能读取执行会话、其它项目或Bot日志；公共背景中的引用不扩权。' + tool.description }
+      : tool))
+  }
+}
 export { SessionManagerEvaluationError } from './manager-parser.ts'
 export type { MainManagerContextPorts, MainManagerHistoryReader, MainManagerObservations } from './manager-tools.ts'
 
@@ -81,7 +92,7 @@ export class MainSessionManager {
     private readonly history: (projectId: string, mainSessionId: string) => MainManagerHistoryReader,
     private readonly context: MainManagerContextPorts,
     _fitHistory: (window: MainHistoryWindow, capacity: MainHistoryCapacity, signal?: AbortSignal) => Promise<MainHistoryWindow>,
-    private readonly ports: ProjectsRuntimePorts) {}
+    private readonly ports: Pick<ProjectsRuntimePorts, 'invocations'>) {}
 
   /** Install before work or Memory scopes and return immediately from the runtime's role branch.
    * @param agent - The exact project-owned hidden manager Agent.
@@ -115,14 +126,13 @@ export class MainSessionManager {
         active.callSeqs.add(call.seq); active.calls.add(exec.token)
         return undefined
       }))
-      disposers.push(agent.ctx.tools.presentAs('native'))
+      disposers.push(agent.ctx.tools.setExecutor(new MainManagerToolExecutor(agent.ctx)))
       disposers.push(agent.ctx.systemPrompt.section({ name: `projects:session-manager:${membership.session.id}`,
         order: agent.ctx.systemPrompt.getSectionOrder('TEAM_POLICY'), text: MAIN_SESSION_MANAGER_PROMPT, complete: true, interpolate: false }))
       disposers.push(agent.ctx.systemPrompt.suppressRuntimeContext())
       disposers.push(agent.ctx.on('system-prompt/assemble', async (_assembly, input, next) => {
         const assembly = await next()
-        return input.agent !== agent ? assembly : { ...assembly, contexts: [], tools: assembly.tools.filter(tool => MAIN_SESSION_MANAGER_TOOLS.has(tool.name)).map(tool =>
-          tool.name === 'project_history' ? { ...tool, description: '本会话管理评估仅可读取绑定的稳定主会话及其合法历史carrier，不能读取执行会话、其它项目或Bot日志；公共背景中的引用不扩权。' + tool.description } : tool) }
+        return input.agent !== agent ? assembly : { ...assembly, contexts: [] }
       }))
       disposers.push(onProjectRequestPrepare(agent, async (payload, _previous) => {
         const active = this.active(slot)
@@ -186,7 +196,7 @@ export class MainSessionManager {
     readonly onSettlement?: (settlement: Promise<SessionManagerDecision>) => void }): Promise<SessionManagerDecision> {
     const { envelope, window, agent, signal } = input, slot = this.slots.get(String(agent.id))
     if (signal.aborted) throw new SessionManagerEvaluationError('cancelled', '本次会话管理评估已取消。')
-    if (slot?.agent !== agent || slot.disposed || slot.membership.project.id !== envelope.projectId || !agent.options.provider || !agent.options.model
+    if (slot?.agent !== agent || slot.disposed || slot.membership.project.id !== envelope.projectId || agent.model.current() === undefined
       || this.ctx.agents.get(agent.id) !== agent) throw new SessionManagerEvaluationError('unavailable', '实际会话管理Bot或明确模型route不可用。')
     if (slot.active !== undefined || agent.status !== 'idle') throw new SessionManagerEvaluationError('busy', '会话管理Bot上次活动尚未停稳。')
     let rejectCancellation!: (error: SessionManagerEvaluationError) => void

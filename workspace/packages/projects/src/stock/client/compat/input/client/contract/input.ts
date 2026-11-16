@@ -220,6 +220,7 @@ export interface SessionInputResolver {
  * paste/…) stay InputBar-private and never ride this face.
  */
 export interface InputActions {
+  insertQuote(text: string, summary?: import('@deepseek-ai/dsh-client-ui-primitives').QuoteSummary): boolean
   /** @returns a revision-guarded copy of the current editor selection. */
   captureInsertion(): TokenSpan
   /**
@@ -261,7 +262,7 @@ export interface InputState {
   readonly attachmentIds: readonly DraftAttachmentId[]
   /** Monotonic editor revision (span CAS compares against this). */
   readonly draftRev: number
-  readonly phase: 'plain' | 'adjudicating' | 'claimed' | 'submitting'
+  readonly phase: 'plain' | 'adjudicating' | 'claimed' | 'submitting' | 'sending'
   /** Present exactly while claimed/submitting (claim snapshot during flight; submit closure withheld). */
   readonly claim?: { readonly name: string; readonly token: string; readonly hint?: string; readonly attachments?: boolean }
   /** Reference occurrence view of the editor's chips, sorted by offset. */
@@ -273,15 +274,13 @@ export interface InputState {
 /**
  * One in-flight submission attempt: the ONLY id concept in the submit plane.
  * Created on enter; carried by adjudicated/submit-settled/sink-settled
- * events; stale attempts are dropped (anti-backwash). Command attempts hold
- * the single frozen in-flight slot; default-sink attempts run detached and
- * concurrently. release/session teardown aborts them all, keeping every
- * promise bounded.
+ * events; commands and ordinary messages hold one frozen in-flight slot.
+ * Release aborts that attempt; Host acceptance alone commits an ordinary draft.
  */
 export interface SubmitAttempt {
   readonly seq: number
   readonly signal: AbortSignal
-  /** Clipboard-projection draft captured before an optimistic default-send commit. */
+  /** Clipboard-projection draft retained until Host acceptance. */
   readonly draftSnapshot: string
   /** Default-message delivery intent retained while slash adjudication is pending. */
   readonly mode: InputSubmitMode
@@ -300,15 +299,13 @@ export type InputEvent =
   /** The editor applied a claim-token replacement: enter claimed. */
   | { readonly type: 'claim'; readonly claim: CommandClaim }
   /** Enter submission with the current clipboard projection. */
-  | { readonly type: 'enter'; readonly mode: InputSubmitMode; readonly draft: string; readonly submission?: MessageSubmission }
+  | { readonly type: 'enter'; readonly mode: InputSubmitMode; readonly draft: string; readonly hasAttachments?: boolean; readonly submission?: MessageSubmission }
   | { readonly type: 'adjudicated'; readonly attempt: SubmitAttempt; readonly outcome: PickOutcome }
   | { readonly type: 'adjudication-failed'; readonly attempt: SubmitAttempt; readonly message: string }
   /** Settlement carries the live clipboard projection for suffix-retention and claim re-entry decisions. */
   | { readonly type: 'submit-settled'; readonly attempt: SubmitAttempt; readonly ok: boolean; readonly draft: string; readonly outcome?: SubmitOutcome; readonly message?: string }
-  /** Settlement of one optimistic default send, independent of the frozen command slot. */
+  /** Host settlement of the current ordinary message. */
   | { readonly type: 'sink-settled'; readonly attempt: SubmitAttempt; readonly ok: boolean; readonly outcome?: SubmitOutcome; readonly message?: string }
-  /** Commit an attachment-only send whose empty draft did not need an attempt. */
-  | { readonly type: 'send-committed' }
   | { readonly type: 'release' }
 
 /**
@@ -318,7 +315,7 @@ export type InputEvent =
 export type InputEffect =
   | { readonly type: 'adjudicate'; readonly attempt: SubmitAttempt; readonly draft: string }
   | { readonly type: 'begin-submit'; readonly attempt: SubmitAttempt; readonly claim: CommandClaim; readonly args: string }
-  /** Detached default send; the shell captures its editor projection before the following commit effect. */
+  /** Ordinary send; the shell preserves the editor until Host acceptance. */
   | {
     readonly type: 'default-sink'
     readonly attempt: SubmitAttempt

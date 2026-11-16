@@ -1,10 +1,10 @@
 /** Tool-category and live-detail interpretation owned by Chat grouping. */
-import type { ProcessActivity, ProcessActivitySummary } from '../contract/process-groups.ts'
+import type { ProcessActivity, RunningProcessActivity, ProcessActivitySummary } from '../contract/process-groups.ts'
 import type { ChatNode } from '../contract/chat-nodes.ts'
 import { isRunningTool } from '../contract/chat-nodes.ts'
 import type { ToolCallBlock } from '../contract/snapshot.ts'
 
-function activity(name: string): ProcessActivity {
+function activity(name: string): RunningProcessActivity {
   if (name === 'read') return 'read'
   if (name === 'read_image') return 'readImage'
   if (name === 'grep' || name === 'glob' || name.endsWith('_inspect')) return 'search'
@@ -94,7 +94,7 @@ function liveToolDetail(name: string, argsRaw: string): string {
 export function processActivity(nodes: readonly ChatNode[]): ProcessActivitySummary {
   const counts = new Map<ProcessActivity, number>()
   const seen = new Set<string>()
-  let running: ProcessActivity | undefined
+  let running: RunningProcessActivity | undefined
   let runningDetail = ''
   let runningTime = -Infinity
   let preparing: boolean | undefined

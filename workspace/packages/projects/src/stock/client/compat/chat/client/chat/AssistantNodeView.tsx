@@ -25,7 +25,7 @@ export const AssistantNodeView = memo(function AssistantNodeView({
     return { turn, seq: data.finalNode.seq, openFile }
   }, [data.finalNode, openFile, tail, turn])
   const mentions = useMemo(
-    () => owner === undefined ? undefined : fileMentions(owner),
+    () => owner === undefined ? undefined : fileMentions?.(owner),
     [fileMentions, owner],
   )
   const reasoningHidden = turnProcess !== undefined
